@@ -1,0 +1,7 @@
+SpeechRecognition>=3.10
+PyAudio>=0.2.13
+gTTS>=2.5
+playsound==1.2.2
+beautifulsoup4>=4.12
+translate>=3.6
+requests>=2.31
