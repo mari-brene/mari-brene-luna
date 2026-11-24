@@ -56,6 +56,49 @@ python main.py --sem-ativacao  # voz, qualquer frase é comando
 python main.py --texto         # teclado (não precisa de microfone nem das libs de áudio)
 ```
 
+## API web
+
+A mesma Luna, servida por HTTP para o front-end. O navegador cuida da voz e executa as ações; a API devolve falas e ações em JSON.
+
+```bash
+pip install -r requirements-web.txt
+uvicorn luna.web.api:app --reload
+# documentação interativa: http://localhost:8000/docs
+```
+
+| Rota | Corpo | Retorno |
+|---|---|---|
+| `GET /api/saude` | — | `{"status": "ok"}` |
+| `POST /api/sessoes` | `{"sessao_id"?}` | saudação e o `sessao_id` |
+| `POST /api/comando` | `{"frase", "sessao_id"?}` | resposta da Luna |
+| `GET /api/habilidades` | — | `[{nome, descricao, exemplo}]` disponíveis na web |
+
+```bash
+curl -s localhost:8000/api/comando -H 'Content-Type: application/json' \
+     -d '{"frase": "tocar Queen", "sessao_id": "SEU_ID"}'
+```
+```json
+{
+  "sessao_id": "ywWmLIwzThi4Unt5-5FGqh2D",
+  "nova_sessao": false,
+  "falas": [{"texto": "Bora de Queen! 🎶", "idioma": "pt"}],
+  "acoes": [{"tipo": "abrir_url", "dados": {"url": "https://open.spotify.com/search/Queen"}}],
+  "habilidade": "musica.tocar",
+  "aguardando_resposta": false,
+  "idioma_escuta": null
+}
+```
+
+- **Sessão:** o servidor gera o `sessao_id` e o cliente o guarda (por exemplo no `localStorage`) para enviá-lo em todas as chamadas. Ele mantém as perguntas pendentes ("Qual é o lembrete?") e **separa os lembretes de cada usuário**.
+- **Ações na web:** `abrir_url` abre uma nova aba, `timer` vira `setTimeout` com notificação, `cancelar_timers` limpa os timers e `encerrar` desliga o microfone. Abrir programas e desligar o PC só existem no desktop.
+- **Segurança:**
+  - o CORS só libera as origens definidas em `LUNA_CORS_ORIGINS` (separadas por vírgula; o padrão é `http://localhost:3000`);
+  - frases têm limite de 500 caracteres;
+  - IDs de sessão inválidos são descartados.
+- **Limitações atuais:**
+  - as sessões ficam em memória (30 min de inatividade, no máximo 10 mil). Se o servidor reiniciar, perde-se só uma pergunta pendente, nunca os lembretes;
+  - os lembretes ficam em SQLite (`LUNA_DB`). Para hospedar em serverless, como o Vercel, o próximo passo é migrar para o Supabase.
+
 ## Configuração — `config.json`
 
 - `nome` / `palavra_ativacao`: identidade e a palavra que a desperta
@@ -65,7 +108,7 @@ python main.py --texto         # teclado (não precisa de microfone nem das libs
 
 ## Arquitetura
 
-O **núcleo** recebe uma frase e devolve uma `Resposta` estruturada. Ele nunca fala nem executa nada sozinho. Quem decide **como** falar e **como** executar cada ação é o **cliente**: hoje o terminal, e no futuro a web.
+O **núcleo** recebe uma frase e devolve uma `Resposta` estruturada. Ele nunca fala nem executa nada sozinho. Quem decide **como** falar e **como** executar cada ação é o **cliente**: o terminal (`main.py`) ou o navegador, via API.
 
 ```
 frase ──► Luna.processar(frase, sessao) ──► Resposta
@@ -88,6 +131,10 @@ luna/
     personalidade.py       todas as falas, piadas e easter eggs
     texto.py               normalização (sem acento/pontuação) com mapa para o texto original
   habilidades/             uma área por arquivo (sem efeitos colaterais: só montam a Resposta)
+  web/
+    api.py                 FastAPI: rotas, validação (Pydantic), CORS
+    servico.py             casos de uso da web, sem depender de framework
+    sessoes.py             sessões em memória com TTL e limite
   clientes/
     executor.py            executa as ações no PC (navegador, timers, programas, shutdown)
     voz.py                 ModoVoz (SpeechRecognition + gTTS) e ModoTexto
@@ -137,9 +184,10 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-São 86 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+São 119 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
 
 - as APIs são simuladas e cada teste usa um SQLite temporário;
+- a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;
 - um teste garante que **o exemplo de cada habilidade aciona a própria habilidade**, para o "ajuda" nunca mentir;
 - a CI roda no GitHub Actions a cada push, com Python 3.10 a 3.13.
 
@@ -149,4 +197,4 @@ AwesomeAPI (cotações) · wttr.in (clima) · Google News RSS (notícias) · Wik
 
 ## Tecnologias
 
-Python 3.10+ · SpeechRecognition · PyAudio · gTTS · playsound · Beautiful Soup 4 · translate · requests · sqlite3 · threading
+Python 3.10+ · FastAPI · Pydantic · SpeechRecognition · PyAudio · gTTS · playsound · Beautiful Soup 4 · translate · requests · sqlite3 · threading
