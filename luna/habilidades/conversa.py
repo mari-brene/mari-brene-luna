@@ -3,7 +3,7 @@
 import re
 
 from ..core.personalidade import EASTER_EGGS, PIADAS, escolher
-from ..core.registro import HABILIDADES, habilidade
+from ..core.registro import disponiveis, habilidade
 
 _EGGS = [(re.compile(p), respostas) for p, respostas in EASTER_EGGS.items()]
 
@@ -16,7 +16,7 @@ def apresentacao(ctx):
 
 @habilidade(r"\b(?:o que voce (?:sabe|consegue) fazer|ajuda|comandos)\b", descricao="Lista comandos", prioridade=3)
 def ajuda(ctx):
-    exemplos = [h for h in HABILIDADES if h.exemplo]
+    exemplos = [h for h in disponiveis(ctx.plataforma) if h.exemplo]
     ctx.dizer("ajuda_intro", n=len(exemplos))
     for h in exemplos:
         ctx.falar(f"• {h.descricao}: \"{h.exemplo}\"")

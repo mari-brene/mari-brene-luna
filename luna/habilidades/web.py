@@ -1,7 +1,6 @@
 """Pesquisa no Google/YouTube e resumos da Wikipédia."""
 
 import urllib.parse
-import webbrowser
 
 import requests
 
@@ -14,7 +13,7 @@ from ..core.registro import habilidade
     descricao="Pesquisa no YouTube", exemplo="Pesquisar lofi no YouTube", prioridade=2, livres=("termo",),
 )
 def youtube(ctx, termo):
-    webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote(termo)}")
+    ctx.abrir_url(f"https://www.youtube.com/results?search_query={urllib.parse.quote(termo)}")
     ctx.dizer("youtube", termo=termo)
 
 
@@ -23,7 +22,7 @@ def youtube(ctx, termo):
     descricao="Pesquisa no Google", exemplo="Pesquisar receita de bolo", livres=("termo",),
 )
 def google(ctx, termo):
-    webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote(termo)}")
+    ctx.abrir_url(f"https://www.google.com/search?q={urllib.parse.quote(termo)}")
     ctx.dizer("google", termo=termo)
 
 

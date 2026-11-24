@@ -9,12 +9,15 @@ from ..core.personalidade import fala
 from ..core.registro import habilidade
 from ..core.texto import para_numero
 
-BANCO = os.path.join(DADOS, "luna.db")
+def _caminho_banco() -> str:
+    # LUNA_DB permite apontar para outro arquivo (ex.: nos testes)
+    return os.environ.get("LUNA_DB") or os.path.join(DADOS, "luna.db")
 
 
 def _conexao() -> sqlite3.Connection:
-    os.makedirs(DADOS, exist_ok=True)
-    con = sqlite3.connect(BANCO)
+    caminho = _caminho_banco()
+    os.makedirs(os.path.dirname(caminho), exist_ok=True)
+    con = sqlite3.connect(caminho)
     con.execute(
         "CREATE TABLE IF NOT EXISTS lembretes ("
         " id INTEGER PRIMARY KEY AUTOINCREMENT, texto TEXT NOT NULL, criado_em TEXT NOT NULL)"
@@ -33,10 +36,14 @@ def _listar(con) -> list[tuple[int, str, str]]:
     descricao="Cria lembrete", exemplo="Lembrar de pagar a internet", livres=("texto",),
 )
 def criar(ctx, texto=None):
-    texto = texto or ctx.ouvir(fala("lembrete_pergunta"), tempo_limite=8)
     if not texto:
-        ctx.dizer("frase_vazia")
+        ctx.perguntar(fala("lembrete_pergunta"), continuar=_salvar)
         return
+    _salvar(ctx, texto)
+
+
+def _salvar(ctx, resposta: str):
+    texto = resposta
     with _conexao() as con:
         con.execute(
             "INSERT INTO lembretes (texto, criado_em) VALUES (?, ?)",

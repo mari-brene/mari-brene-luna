@@ -1,32 +1,22 @@
 """
-Luna — assistente virtual em Python.
+Luna — cliente desktop (terminal).
 
-    python main.py            # modo voz: diga "Luna, que horas são?"
-    python main.py --texto    # modo texto: digite os comandos (sem microfone)
+    python main.py                 # voz: diga "Luna, que horas são?"
+    python main.py --sem-ativacao  # voz, sem precisar dizer "Luna"
+    python main.py --texto         # teclado, sem microfone
 """
 
 import argparse
+import logging
 import re
 
-from luna import habilidades  # noqa: F401  (registra as habilidades)
+from luna.clientes.executor import ExecutorLocal
+from luna.clientes.voz import ModoTexto, ModoVoz
+from luna.core.assistente import Luna
+from luna.core.contexto import carregar_config
 from luna.core.personalidade import fala
-from luna.core.contexto import Contexto, carregar_config
-from luna.core.registro import encontrar
+from luna.core.sessao import Sessao
 from luna.core.texto import normalizar_com_mapa, trecho_original
-from luna.core.voz import ModoTexto, ModoVoz
-
-
-def executar(ctx: Contexto, frase: str) -> None:
-    hab, args, comando = encontrar(frase)
-    ctx.comando_atual = comando
-    if not hab:
-        ctx.dizer("nao_entendi")
-        return
-    try:
-        hab.funcao(ctx, **args)
-    except Exception as erro:  # uma habilidade com erro não derruba a assistente
-        print(f"  [erro em {hab.funcao.__name__}: {erro!r}]")
-        ctx.dizer("erro")
 
 
 def extrair_comando(frase: str, ativacao: str) -> str | None:
@@ -42,33 +32,41 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Luna, assistente virtual")
     parser.add_argument("--texto", action="store_true", help="usar teclado em vez de microfone")
     parser.add_argument("--sem-ativacao", action="store_true", help="não exigir 'Luna' antes do comando")
+    parser.add_argument("--debug", action="store_true", help="mostra logs")
     opcoes = parser.parse_args()
+    logging.basicConfig(level=logging.DEBUG if opcoes.debug else logging.WARNING)
 
     config = carregar_config()
     modo_texto = opcoes.texto or not config.get("voz_ativa", True)
     io = ModoTexto(config["nome"]) if modo_texto else ModoVoz(config["nome"], config["idioma"])
-    ctx = Contexto(config=config, io=io)
+    luna = Luna(config, plataforma="desktop")
+    executor = ExecutorLocal(io, luna.sistema)
+    sessao = Sessao()
     exigir_ativacao = not (modo_texto or opcoes.sem_ativacao)
+    idioma_escuta = None  # muda quando a Luna espera uma frase em outro idioma
 
-    ctx.dizer("boas_vindas" if exigir_ativacao else "boas_vindas_texto")
+    executor.executar(luna.saudacao(sessao, exigir_ativacao))
 
-    while ctx.rodando:
+    while executor.rodando:
         try:
-            frase = ctx.ouvir()
+            frase = io.ouvir(idioma=idioma_escuta) if idioma_escuta else io.ouvir()
             if not frase:
                 continue
-            if exigir_ativacao:
+            # ao responder uma pergunta da Luna, não é preciso dizer o nome dela
+            if exigir_ativacao and not sessao.pendente:
                 comando = extrair_comando(frase, config["palavra_ativacao"])
                 if comando is None:
                     continue  # conversa no ambiente, não era comigo
-                comando = comando or ctx.ouvir(fala("sim"))
+                comando = comando or io.ouvir(fala("sim"))
                 if not comando:
                     continue
             else:
                 comando = extrair_comando(frase, config["palavra_ativacao"]) or frase
-            executar(ctx, comando)
+            resposta = luna.processar(comando, sessao)
+            idioma_escuta = resposta.idioma_escuta
+            executor.executar(resposta)
         except KeyboardInterrupt:
-            executar(ctx, "encerrar")
+            executor.executar(luna.processar("encerrar", sessao))
 
 
 if __name__ == "__main__":

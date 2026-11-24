@@ -11,7 +11,7 @@ import tempfile
 import threading
 import uuid
 
-from .personalidade import sem_emoji
+from ..core.personalidade import sem_emoji
 
 ROXO = "\033[95m"
 RESET = "\033[0m"

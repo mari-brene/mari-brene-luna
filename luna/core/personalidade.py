@@ -39,6 +39,8 @@ FALAS: dict[str, list[str]] = {
         "Timeout! Ou a internet caiu ou o servidor foi tomar café ☕",
         "A API não respondeu. Nem tudo é culpa do front-end, sabia?",
     ],
+    "desistiu": ["Beleza, deixa pra lá.", "Ok, cancelado. Finge que nem perguntei.", "Abortando operação 🫡"],
+    "so_desktop": ["Isso eu só consigo fazer no computador, pela versão desktop.", "Daqui do navegador não alcanço seu sistema. Só na versão desktop!"],
     "tchau": [
         "Até logo! 🌙",
         "Encerrando processo... foi bom enquanto durou 💜",

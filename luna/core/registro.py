@@ -11,6 +11,9 @@ pontuação). Grupos nomeados do regex viram argumentos da função:
 Grupos listados em `livres` chegam como o usuário falou (com acentos e
 maiúsculas) — use para texto livre. Os demais chegam normalizados — use
 para chaves de dicionário (moeda, idioma, unidade...).
+
+`plataformas` restringe onde a habilidade existe ("desktop", "web").
+Por padrão ela vale em todas.
 """
 
 import re
@@ -28,7 +31,12 @@ class Habilidade:
     exemplo: str
     prioridade: int
     livres: tuple[str, ...]
+    plataformas: frozenset[str] | None
     ordem: int
+
+    @property
+    def nome(self) -> str:
+        return f"{self.funcao.__module__.rsplit('.', 1)[-1]}.{self.funcao.__name__}"
 
 
 HABILIDADES: list[Habilidade] = []
@@ -40,6 +48,7 @@ def habilidade(
     exemplo: str = "",
     prioridade: int = 0,
     livres: tuple[str, ...] = (),
+    plataformas: tuple[str, ...] | None = None,
 ):
     def decorador(funcao: Callable) -> Callable:
         HABILIDADES.append(
@@ -50,6 +59,7 @@ def habilidade(
                 exemplo=exemplo,
                 prioridade=prioridade,
                 livres=livres,
+                plataformas=frozenset(plataformas) if plataformas else None,
                 ordem=len(HABILIDADES),
             )
         )
@@ -57,13 +67,17 @@ def habilidade(
     return decorador
 
 
-def encontrar(frase: str):
+def disponiveis(plataforma: str | None = None) -> list[Habilidade]:
+    return [h for h in HABILIDADES if plataforma is None or h.plataformas is None or plataforma in h.plataformas]
+
+
+def encontrar(frase: str, plataforma: str | None = None):
     """
     Recebe a frase original. Devolve (habilidade, argumentos, comando_normalizado),
     com habilidade=None se nada casar.
     """
     comando, mapa = normalizar_com_mapa(frase)
-    for hab in sorted(HABILIDADES, key=lambda h: (-h.prioridade, h.ordem)):
+    for hab in sorted(disponiveis(plataforma), key=lambda h: (-h.prioridade, h.ordem)):
         for padrao in hab.padroes:
             achou = padrao.search(comando)
             if not achou:

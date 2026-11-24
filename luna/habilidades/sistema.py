@@ -1,14 +1,25 @@
-"""Abrir programas, agendar/cancelar desligamento e encerrar a assistente."""
+"""
+Abrir programas, agendar/cancelar desligamento e encerrar a assistente.
+
+As habilidades só decidem O QUE fazer e devolvem uma ação; quem executa é o
+cliente desktop (luna/clientes/executor.py). Na web elas não existem, e uma
+habilidade substituta explica isso.
+"""
 
 import os
-import subprocess
 
 from ..core.registro import habilidade
 from ..core.texto import normalizar, para_numero
 
+_ABRIR = r"^(?:abrir?|abra|inicia[r]?) (?:o |a )?(?P<alvo>.+)$"
+_DESLIGAR = (
+    r"\bdesligar? (?:o )?(?:computador|pc)(?: em| daqui a)? (?P<qtd>[\w,.]+)? ?(?P<unidade>minuto|hora)s?",
+    r"\bdesligar? (?:o )?(?:computador|pc) em (?P<qtd>meia) (?P<unidade>hora)",
+)
 
-@habilidade(r"^(?:abrir?|abra|inicia[r]?) (?:o |a )?(?P<alvo>.+)$",
-            descricao="Abre programas", exemplo="Abrir Discord", prioridade=-2, livres=("alvo",))
+
+@habilidade(_ABRIR, descricao="Abre programas", exemplo="Abrir Discord",
+            prioridade=-2, livres=("alvo",), plataformas=("desktop",))
 def abrir(ctx, alvo):
     programas = ctx.config["programas"]
     nome = normalizar(alvo)
@@ -17,35 +28,33 @@ def abrir(ctx, alvo):
     if not comando:
         ctx.dizer("abrir_desconhecido", alvo=alvo)
         return
-    try:
-        subprocess.Popen(os.path.expandvars(comando), shell=True)
-        ctx.dizer("abrir_ok", alvo=alvo)
-    except OSError:
-        ctx.dizer("abrir_erro", alvo=alvo)
+    ctx.acao("abrir_programa", comando=os.path.expandvars(comando), nome=alvo)
+    ctx.dizer("abrir_ok", alvo=alvo)
 
 
-@habilidade(
-    r"\bdesligar? (?:o )?(?:computador|pc)(?: em| daqui a)? (?P<qtd>[\w,.]+)? ?(?P<unidade>minuto|hora)s?",
-    r"\bdesligar? (?:o )?(?:computador|pc) em (?P<qtd>meia) (?P<unidade>hora)",
-    descricao="Agenda desligamento", exemplo="Desligar o computador em 40 minutos", prioridade=4,
-)
+@habilidade(*_DESLIGAR, descricao="Agenda desligamento", exemplo="Desligar o computador em 40 minutos",
+            prioridade=4, plataformas=("desktop",))
 def desligar(ctx, unidade, qtd=None):
     n = para_numero(qtd) if qtd else 1
     if not n:
         ctx.dizer("desligar_invalido")
         return
     minutos = max(1, round(n * (60 if unidade == "hora" else 1)))
-    cmd = f"shutdown /s /t {minutos * 60}" if ctx.sistema == "Windows" else f"shutdown -h +{minutos}"
-    if os.system(cmd) == 0:
-        ctx.dizer("desligar_ok", minutos=minutos)
-    else:
-        ctx.dizer("desligar_negado")
+    ctx.acao("desligar", minutos=minutos)
+    ctx.dizer("desligar_ok", minutos=minutos)
 
 
-@habilidade(r"\bcancelar (?:o )?desligamento\b", descricao="Cancela desligamento", prioridade=5)
+@habilidade(r"\bcancelar (?:o )?desligamento\b", descricao="Cancela desligamento",
+            prioridade=5, plataformas=("desktop",))
 def cancelar(ctx):
-    os.system("shutdown /a" if ctx.sistema == "Windows" else "shutdown -c")
+    ctx.acao("cancelar_desligamento")
     ctx.dizer("desligamento_cancelado")
+
+
+@habilidade(_ABRIR, *_DESLIGAR, r"\bcancelar (?:o )?desligamento\b",
+            descricao="Avisa que é só no desktop", prioridade=-2, plataformas=("web",))
+def so_desktop(ctx, **_):
+    ctx.dizer("so_desktop")
 
 
 @habilidade(
@@ -55,4 +64,4 @@ def cancelar(ctx):
 )
 def encerrar(ctx):
     ctx.dizer("tchau")
-    ctx.rodando = False
+    ctx.acao("encerrar")

@@ -2,7 +2,6 @@
 
 import re
 import urllib.parse
-import webbrowser
 
 from ..core.registro import habilidade
 
@@ -14,8 +13,8 @@ from ..core.registro import habilidade
 def tocar(ctx, musica, yt=None):
     musica = re.sub(r"\s+no spotify$", "", musica, flags=re.I)
     if yt:
-        webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote(musica)}")
+        ctx.abrir_url(f"https://www.youtube.com/results?search_query={urllib.parse.quote(musica)}")
         ctx.dizer("musica_youtube", musica=musica)
     else:
-        webbrowser.open(f"https://open.spotify.com/search/{urllib.parse.quote(musica)}")
+        ctx.abrir_url(f"https://open.spotify.com/search/{urllib.parse.quote(musica)}")
         ctx.dizer("spotify", musica=musica)
