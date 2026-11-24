@@ -7,6 +7,7 @@ on:
 
 jobs:
   pytest:
+    name: python (núcleo + API)
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -20,3 +21,29 @@ jobs:
           cache-dependency-path: requirements*.txt
       - run: pip install -r requirements-dev.txt
       - run: pytest
+
+  web:
+    name: web (typecheck, build e E2E no Chromium)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r ../requirements.txt playwright
+      - run: python -m playwright install --with-deps chromium
+      - run: python e2e/teste_front.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-e2e
+          path: web/e2e/capturas/
