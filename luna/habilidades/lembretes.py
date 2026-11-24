@@ -1,8 +1,10 @@
-"""Lembretes e anotações persistidos em SQLite."""
+"""Lembretes e anotações persistidos em SQLite, separados por usuário (ctx.sessao.id)."""
 
 import os
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime
+from typing import Iterator
 
 from ..core.contexto import DADOS
 from ..core.personalidade import fala
@@ -14,19 +16,32 @@ def _caminho_banco() -> str:
     return os.environ.get("LUNA_DB") or os.path.join(DADOS, "luna.db")
 
 
-def _conexao() -> sqlite3.Connection:
+@contextmanager
+def _conexao() -> Iterator[sqlite3.Connection]:
+    """Abre, faz commit (ou rollback) e fecha. Cria/migra a tabela se preciso."""
     caminho = _caminho_banco()
     os.makedirs(os.path.dirname(caminho), exist_ok=True)
     con = sqlite3.connect(caminho)
-    con.execute(
-        "CREATE TABLE IF NOT EXISTS lembretes ("
-        " id INTEGER PRIMARY KEY AUTOINCREMENT, texto TEXT NOT NULL, criado_em TEXT NOT NULL)"
-    )
-    return con
+    try:
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS lembretes ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT, texto TEXT NOT NULL, criado_em TEXT NOT NULL,"
+            " usuario TEXT NOT NULL DEFAULT 'local')"
+        )
+        colunas = {linha[1] for linha in con.execute("PRAGMA table_info(lembretes)")}
+        if "usuario" not in colunas:  # banco criado por versão antiga
+            con.execute("ALTER TABLE lembretes ADD COLUMN usuario TEXT NOT NULL DEFAULT 'local'")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_lembretes_usuario ON lembretes (usuario)")
+        with con:
+            yield con
+    finally:
+        con.close()
 
 
-def _listar(con) -> list[tuple[int, str, str]]:
-    return con.execute("SELECT id, texto, criado_em FROM lembretes ORDER BY id").fetchall()
+def _listar(con, usuario: str) -> list[tuple[int, str, str]]:
+    return con.execute(
+        "SELECT id, texto, criado_em FROM lembretes WHERE usuario = ? ORDER BY id", (usuario,)
+    ).fetchall()
 
 
 @habilidade(
@@ -46,8 +61,8 @@ def _salvar(ctx, resposta: str):
     texto = resposta
     with _conexao() as con:
         con.execute(
-            "INSERT INTO lembretes (texto, criado_em) VALUES (?, ?)",
-            (texto, datetime.now().strftime("%d/%m %H:%M")),
+            "INSERT INTO lembretes (texto, criado_em, usuario) VALUES (?, ?, ?)",
+            (texto, datetime.now().strftime("%d/%m %H:%M"), ctx.sessao.id),
         )
     ctx.dizer("lembrete_ok", texto=texto)
 
@@ -59,7 +74,7 @@ def _salvar(ctx, resposta: str):
 def apagar(ctx, num):
     n = para_numero(num)
     with _conexao() as con:
-        lista = _listar(con)
+        lista = _listar(con, ctx.sessao.id)
         if not n or not 1 <= n <= len(lista):
             ctx.dizer("lembrete_inexistente")
             return
@@ -74,7 +89,7 @@ def apagar(ctx, num):
 )
 def limpar(ctx):
     with _conexao() as con:
-        con.execute("DELETE FROM lembretes")
+        con.execute("DELETE FROM lembretes WHERE usuario = ?", (ctx.sessao.id,))
     ctx.dizer("lembretes_limpos")
 
 
@@ -85,7 +100,7 @@ def limpar(ctx):
 )
 def listar(ctx):
     with _conexao() as con:
-        lista = _listar(con)
+        lista = _listar(con, ctx.sessao.id)
     if not lista:
         ctx.dizer("lembrete_vazio")
         return

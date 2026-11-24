@@ -117,6 +117,28 @@ def test_ciclo_completo_de_lembretes(luna, sessao):
     assert "1." not in r.texto
 
 
+def test_lembretes_sao_separados_por_usuario(luna):
+    from luna.core.sessao import Sessao
+    ana, bia = Sessao("ana"), Sessao("bia")
+    luna.processar("lembrar de comprar pão", ana)
+    luna.processar("lembrar de estudar regex", bia)
+    luna.processar("limpar lembretes", bia)
+    assert "comprar pão" in luna.processar("ver lembretes", ana).texto
+    assert "1." not in luna.processar("ver lembretes", bia).texto
+
+
+def test_migra_banco_antigo_sem_coluna_usuario(luna, sessao, tmp_path, monkeypatch):
+    import sqlite3
+    caminho = tmp_path / "antigo.db"
+    con = sqlite3.connect(caminho)
+    con.execute("CREATE TABLE lembretes (id INTEGER PRIMARY KEY AUTOINCREMENT, texto TEXT NOT NULL, criado_em TEXT NOT NULL)")
+    con.execute("INSERT INTO lembretes (texto, criado_em) VALUES ('lembrete antigo', '01/11 10:00')")
+    con.commit()
+    con.close()
+    monkeypatch.setenv("LUNA_DB", str(caminho))
+    assert "lembrete antigo" in luna.processar("ver lembretes", sessao).texto  # sessão padrão = "local"
+
+
 def test_apagar_lembrete_inexistente(luna, sessao):
     r = luna.processar("apagar lembrete 7", sessao)
     assert r.habilidade == "lembretes.apagar" and r.falas
