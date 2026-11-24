@@ -1,0 +1,15 @@
+# Deploy da API no Render (render.com) via Blueprint.
+# Front-end: publique a pasta web/ no Vercel com VITE_API_URL apontando para esta API.
+services:
+  - type: web
+    name: luna-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-web.txt
+    startCommand: uvicorn luna.web.api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/saude
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: LUNA_CORS_ORIGINS
+        sync: false # ex.: https://luna-web.vercel.app

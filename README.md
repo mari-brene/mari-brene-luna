@@ -99,6 +99,46 @@ curl -s localhost:8000/api/comando -H 'Content-Type: application/json' \
   - as sessões ficam em memória (30 min de inatividade, no máximo 10 mil). Se o servidor reiniciar, perde-se só uma pergunta pendente, nunca os lembretes;
   - os lembretes ficam em SQLite (`LUNA_DB`). Para hospedar em serverless, como o Vercel, o próximo passo é migrar para o Supabase.
 
+## Front-end web
+
+Interface em **React + TypeScript (Vite)** na pasta `web/`: chat, botão de microfone e voz da Luna, tudo pelo navegador.
+
+```bash
+cd web
+cp .env.example .env          # VITE_API_URL=http://localhost:8000
+npm install
+npm run dev                   # http://localhost:3000 (com a API rodando)
+```
+
+- **Voz:** usa a Web Speech API. O `SpeechRecognition` escuta e o `speechSynthesis` fala, sem custo e sem chave. O reconhecimento funciona no Chrome e no Edge; nos outros navegadores dá para digitar.
+- **Ações no navegador:**
+  - `abrir_url` abre uma nova aba e também vira um botão na mensagem, caso o navegador bloqueie o pop-up;
+  - `timer` mostra uma contagem regressiva e avisa por voz e por notificação;
+  - os timers podem ser cancelados por voz ou pelo ×.
+- **Conversa por voz:** quando a Luna faz uma pergunta ("Qual é o lembrete?"), o microfone reabre sozinho. Na tradução para o português, ele escuta em inglês.
+- **Estado no navegador:** a sessão (com os lembretes) e a opção de silenciar ficam no `localStorage`.
+- **Ajuda:** o botão `?` lista as habilidades disponíveis na web; tocar num exemplo envia o comando.
+- **Acessibilidade:** a conversa é um `role="log"` com `aria-live`, os botões têm rótulos, a navegação funciona pelo teclado e as animações respeitam `prefers-reduced-motion`.
+
+### Teste ponta a ponta
+
+`web/e2e/teste_front.py` abre o **build de produção no Chromium** (Playwright) e conversa com o `ServicoLuna` real, com a voz simulada. São 17 cenários: texto, voz, pergunta com o microfone reabrindo, timers, links, ajuda, mudo, recarregar a página, isolamento entre usuários, servidor offline e layout no celular.
+
+```bash
+cd web && npm run build && cd ..
+pip install playwright && python -m playwright install chromium
+python web/e2e/teste_front.py
+```
+
+## Deploy
+
+| Parte | Onde | Como |
+|---|---|---|
+| API | Render | `render.yaml` na raiz (Blueprint). Defina `LUNA_CORS_ORIGINS` com a URL do front |
+| Front | Vercel | Root Directory `web`, framework Vite, variável `VITE_API_URL` com a URL da API |
+
+No plano gratuito do Render, o disco é apagado a cada deploy, então os lembretes em SQLite não sobrevivem. Para produção, o próximo passo é levar os lembretes para o Supabase.
+
 ## Configuração — `config.json`
 
 - `nome` / `palavra_ativacao`: identidade e a palavra que a desperta
@@ -138,7 +178,13 @@ luna/
   clientes/
     executor.py            executa as ações no PC (navegador, timers, programas, shutdown)
     voz.py                 ModoVoz (SpeechRecognition + gTTS) e ModoTexto
-tests/                     pytest: roteamento, habilidades (APIs mockadas), sessões
+tests/                     pytest: roteamento, habilidades (APIs mockadas), sessões, API
+web/                       front-end React + TypeScript (Vite)
+  src/App.tsx              conversa, envio de comandos, microfone
+  src/api.ts               cliente da API (timeout, erros)
+  src/voz.ts               Web Speech API: escutar e falar
+  src/acoes.ts             executa as ações no navegador
+  e2e/teste_front.py       teste ponta a ponta no Chromium
 dados/luna.db              lembretes (SQLite; LUNA_DB muda o caminho)
 ```
 
@@ -189,7 +235,7 @@ São 119 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no si
 - as APIs são simuladas e cada teste usa um SQLite temporário;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;
 - um teste garante que **o exemplo de cada habilidade aciona a própria habilidade**, para o "ajuda" nunca mentir;
-- a CI roda no GitHub Actions a cada push, com Python 3.10 a 3.13.
+- a CI roda no GitHub Actions a cada push, com Python 3.10 a 3.13. O front passa por typecheck, build e pelo teste E2E no Chromium, que guarda as capturas de tela como artefato.
 
 ## APIs usadas (nenhuma exige chave)
 
@@ -197,4 +243,4 @@ AwesomeAPI (cotações) · wttr.in (clima) · Google News RSS (notícias) · Wik
 
 ## Tecnologias
 
-Python 3.10+ · FastAPI · Pydantic · SpeechRecognition · PyAudio · gTTS · playsound · Beautiful Soup 4 · translate · requests · sqlite3 · threading
+Python 3.10+ · FastAPI · Pydantic · React 19 · TypeScript · Vite · Web Speech API · Playwright · SpeechRecognition · PyAudio · gTTS · playsound · Beautiful Soup 4 · translate · requests · sqlite3 · threading
