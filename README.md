@@ -1,5 +1,7 @@
 # 🌙 Luna — Assistente Virtual em Python
 
+[![testes](https://github.com/mari-brene/mari-brene-luna/actions/workflows/testes.yml/badge.svg)](https://github.com/mari-brene/mari-brene-luna/actions/workflows/testes.yml)
+
 A Luna é uma assistente de voz em português. Você chama pelo nome — **"Luna, que horas são?"** — e ela executa e responde falando. Também roda em **modo texto**, para desenvolver e testar sem microfone.
 
 ## Personalidade
@@ -40,7 +42,8 @@ Os emojis aparecem no terminal, mas são removidos antes da síntese de voz.
 ```bash
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-voz.txt   # modo voz (inclui o núcleo)
+# ou só: pip install -r requirements.txt para o modo texto
 ```
 
 `PyAudio` precisa do PortAudio: `sudo apt install portaudio19-dev` (Linux) ou `brew install portaudio` (macOS). No Windows o wheel já vem pronto. O `playsound` fica fixado em 1.2.2 porque a 1.3.0 tem bugs no Windows.
@@ -62,21 +65,39 @@ python main.py --texto         # teclado (não precisa de microfone nem das libs
 
 ## Arquitetura
 
+O **núcleo** recebe uma frase e devolve uma `Resposta` estruturada. Ele nunca fala nem executa nada sozinho. Quem decide **como** falar e **como** executar cada ação é o **cliente**: hoje o terminal, e no futuro a web.
+
 ```
-main.py                    loop principal, palavra de ativação, modos voz/texto
+frase ──► Luna.processar(frase, sessao) ──► Resposta
+                                              ├─ falas:  [Fala(texto, idioma)]
+                                              ├─ acoes:  [Acao("abrir_url", {url}), Acao("timer", {segundos, mensagem}) ...]
+                                              ├─ aguardando_resposta / idioma_escuta
+                                              └─ habilidade: "clima.clima"
+```
+
+```
+main.py                    cliente desktop: palavra de ativação + loop
 config.json
 luna/
   core/
-    registro.py            @habilidade: registro e roteamento por regex
+    assistente.py          Luna.processar(): roteia, executa a habilidade, trata erros e perguntas pendentes
+    resposta.py            Resposta, Fala, Acao (serializável em JSON)
+    sessao.py              estado entre frases (pergunta pendente, histórico)
+    contexto.py            o que a habilidade usa: falar, dizer, acao, abrir_url, agendar, perguntar
+    registro.py            @habilidade: registro e roteamento por regex, com filtro de plataforma
     personalidade.py       todas as falas, piadas e easter eggs
     texto.py               normalização (sem acento/pontuação) com mapa para o texto original
+  habilidades/             uma área por arquivo (sem efeitos colaterais: só montam a Resposta)
+  clientes/
+    executor.py            executa as ações no PC (navegador, timers, programas, shutdown)
     voz.py                 ModoVoz (SpeechRecognition + gTTS) e ModoTexto
-    contexto.py            Contexto passado a toda habilidade (falar, ouvir, config)
-  habilidades/             uma área por arquivo
-    tempo.py  web.py  financas.py  clima.py  noticias.py
-    musica.py tradutor.py lembretes.py sistema.py conversa.py
-dados/luna.db              lembretes (SQLite, criado automaticamente)
+tests/                     pytest: roteamento, habilidades (APIs mockadas), sessões
+dados/luna.db              lembretes (SQLite; LUNA_DB muda o caminho)
 ```
+
+### Plataformas
+
+Algumas habilidades só existem no desktop, como abrir programas e desligar o PC. Elas são marcadas com `plataformas=("desktop",)`. Uma instância com `Luna(config, plataforma="web")` não as enxerga, e o comando "ajuda" lista só o que está disponível em cada plataforma.
 
 ### Criando uma habilidade
 
@@ -92,11 +113,35 @@ def rolar(ctx, lados="6"):
     # e em personalidade.py: "dado": ["Deu {valor} 🎲", "Rolou... {valor}!"]
 ```
 
-Depois, importe o módulo em `luna/habilidades/__init__.py`. Pronto: ela já aparece no comando "o que você sabe fazer".
+Depois, importe o módulo em `luna/habilidades/__init__.py`. A habilidade já aparece no comando "ajuda".
 
 - Os padrões são aplicados ao comando **normalizado** (minúsculo, sem acento e sem pontuação).
 - Grupos em `livres=("nome",)` chegam como o usuário falou, com acentos e maiúsculas.
 - `prioridade` desempata quando dois padrões casam (maior vence).
+
+O que uma habilidade pode usar no `ctx`:
+
+| Método | Efeito |
+|---|---|
+| `ctx.dizer("chave", **valores)` | fala uma variação da personalidade |
+| `ctx.falar(texto, idioma="pt")` | fala um texto livre |
+| `ctx.abrir_url(url)` | ação `abrir_url` |
+| `ctx.agendar(segundos, mensagem)` | ação `timer` |
+| `ctx.acao(tipo, **dados)` | qualquer outra ação |
+| `ctx.perguntar(texto, continuar=fn, **dados)` | faz uma pergunta; a próxima frase vai para `fn(ctx, resposta=..., **dados)`. "Deixa pra lá" cancela |
+
+## Testes
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+São 86 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+
+- as APIs são simuladas e cada teste usa um SQLite temporário;
+- um teste garante que **o exemplo de cada habilidade aciona a própria habilidade**, para o "ajuda" nunca mentir;
+- a CI roda no GitHub Actions a cada push, com Python 3.10 a 3.13.
 
 ## APIs usadas (nenhuma exige chave)
 
