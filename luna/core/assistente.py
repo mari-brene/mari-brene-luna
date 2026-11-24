@@ -40,7 +40,10 @@ class Luna:
 
     def saudacao(self, sessao: Sessao, exigir_ativacao: bool) -> Resposta:
         ctx = self._contexto(sessao)
-        ctx.dizer("boas_vindas" if exigir_ativacao else "boas_vindas_texto")
+        if exigir_ativacao:
+            ctx.dizer("boas_vindas")
+        else:
+            ctx.dizer("boas_vindas_web" if self.plataforma == "web" else "boas_vindas_texto")
         return ctx.resposta
 
     def processar(self, frase: str, sessao: Sessao) -> Resposta:

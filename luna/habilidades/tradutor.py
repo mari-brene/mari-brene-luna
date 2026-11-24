@@ -30,10 +30,10 @@ def _continuar(ctx, resposta: str, destino: str):
 
 
 def _traduzir(ctx, frase: str, destino: str) -> None:
-    from translate import Translator  # import tardio
-
     origem = "en" if destino == "pt" else "pt"
     try:
+        from translate import Translator  # import tardio: só quem traduz precisa da lib
+
         resultado = Translator(from_lang=origem, to_lang=destino).translate(frase)
     except Exception:
         ctx.dizer("tradutor_erro")

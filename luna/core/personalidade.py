@@ -23,6 +23,11 @@ FALAS: dict[str, list[str]] = {
         "Luna online no modo texto. Manda aí! ⌨️",
         "Modo terminal ativado. Digita que eu executo.",
     ],
+    "boas_vindas_web": [
+        "Oi! Eu sou a Luna 🌙 Toca no microfone ou digita aí embaixo.",
+        "Luna online! Pode falar comigo pelo microfone ou pelo teclado. Diz 'ajuda' se quiser ver meus truques.",
+        "E aí! Luna na área, rodando direto do seu navegador. Bora?",
+    ],
     "sim": ["Sim?", "Pode falar!", "Tô ouvindo 👂", "Diga, humana."],
     "nao_entendi": [
         "Hmm, isso não está no meu código ainda. Fala 'ajuda' pra ver o que eu sei.",
