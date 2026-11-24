@@ -1,0 +1,540 @@
+/* Luna — tema noturno */
+:root {
+  --fundo: #0b0c1d;
+  --fundo-2: #12132b;
+  --superficie: rgba(255, 255, 255, 0.05);
+  --superficie-2: rgba(255, 255, 255, 0.09);
+  --borda: rgba(255, 255, 255, 0.1);
+  --texto: #ecebff;
+  --texto-suave: #a5a3c7;
+  --roxo: #a78bfa;
+  --roxo-forte: #7c3aed;
+  --roxo-claro: #c4b5fd;
+  --verde: #4ade80;
+  --amarelo: #fbbf24;
+  --vermelho: #f87171;
+  --raio: 18px;
+  --sombra: 0 10px 40px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  color: var(--texto);
+  background:
+    radial-gradient(1.5px 1.5px at 12% 18%, #fff8 50%, transparent 51%),
+    radial-gradient(1px 1px at 72% 9%, #fff6 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 88% 42%, #fff5 50%, transparent 51%),
+    radial-gradient(1px 1px at 33% 64%, #fff4 50%, transparent 51%),
+    radial-gradient(1px 1px at 55% 30%, #fff5 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 6% 82%, #fff4 50%, transparent 51%),
+    radial-gradient(1px 1px at 93% 88%, #fff5 50%, transparent 51%),
+    radial-gradient(900px 600px at 85% -10%, rgba(124, 58, 237, 0.28), transparent 60%),
+    radial-gradient(700px 500px at -10% 110%, rgba(56, 189, 248, 0.12), transparent 60%),
+    linear-gradient(180deg, var(--fundo) 0%, var(--fundo-2) 100%);
+  background-attachment: fixed;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--roxo);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ layout */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+}
+
+.identidade {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lua {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff 0%, var(--roxo-claro) 35%, var(--roxo-forte) 100%);
+  box-shadow:
+    0 0 24px rgba(167, 139, 250, 0.55),
+    inset -8px -6px 0 rgba(11, 12, 29, 0.55);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: 0.02em;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+
+.ponto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--amarelo);
+}
+.status-online .ponto {
+  background: var(--verde);
+  box-shadow: 0 0 8px var(--verde);
+}
+.status-offline .ponto {
+  background: var(--vermelho);
+}
+
+.acoes-topo {
+  display: flex;
+  gap: 8px;
+}
+
+.icone {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  font-size: 1rem;
+  font-weight: 700;
+  transition: background 0.15s;
+}
+.icone:hover {
+  background: var(--superficie-2);
+}
+
+/* ------------------------------------------------------------------ avisos */
+.aviso {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 20px 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+.aviso-erro {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.4);
+}
+.aviso button {
+  flex-shrink: 0;
+  border: 1px solid var(--borda);
+  background: var(--superficie-2);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+/* ---------------------------------------------------------------- conversa */
+.conversa {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 20px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--superficie-2) transparent;
+}
+
+.mensagens {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.linha {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  animation: surgir 0.25s ease-out;
+}
+.linha-voce {
+  justify-content: flex-end;
+}
+
+.avatar {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--superficie-2);
+  font-size: 0.95rem;
+}
+
+.balao {
+  position: relative;
+  max-width: min(80%, 560px);
+  padding: 10px 14px 6px;
+  border-radius: var(--raio);
+  overflow-wrap: anywhere;
+}
+.balao p {
+  margin: 0;
+}
+.balao p + p {
+  margin-top: 4px;
+}
+
+.balao-luna {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-bottom-left-radius: 6px;
+}
+
+.balao-voce {
+  background: linear-gradient(135deg, var(--roxo-forte), #6d28d9);
+  border-bottom-right-radius: 6px;
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.3);
+}
+
+.balao-parcial {
+  opacity: 0.6;
+  font-style: italic;
+  padding-bottom: 10px;
+}
+
+.hora {
+  display: block;
+  margin-top: 2px;
+  text-align: right;
+  font-size: 0.68rem;
+  color: var(--texto-suave);
+}
+.balao-voce .hora {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.link-acao {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(167, 139, 250, 0.16);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  color: var(--roxo-claro);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.link-acao:hover {
+  background: rgba(167, 139, 250, 0.28);
+}
+
+.digitando {
+  display: flex;
+  gap: 5px;
+  padding: 14px 16px;
+}
+.digitando span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--roxo-claro);
+  animation: pular 1.1s infinite ease-in-out;
+}
+.digitando span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.digitando span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* ------------------------------------------------------------------ rodapé */
+.rodape {
+  padding: 8px 20px calc(16px + env(safe-area-inset-bottom));
+}
+
+.timers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+.timer-tempo {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.timer-cancelar {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: var(--superficie-2);
+  line-height: 1;
+}
+
+.sugestoes {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 10px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.sugestoes button {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  font-size: 0.88rem;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.sugestoes button:hover {
+  background: var(--superficie-2);
+  border-color: rgba(167, 139, 250, 0.5);
+}
+
+.entrada {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(18, 19, 43, 0.85);
+  border: 1px solid var(--borda);
+  box-shadow: var(--sombra);
+  backdrop-filter: blur(10px);
+}
+.entrada input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 6px;
+  border: none;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  font-size: 1rem;
+}
+.entrada input:focus {
+  outline: none;
+}
+.entrada input::placeholder {
+  color: var(--texto-suave);
+}
+
+.microfone,
+.enviar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: none;
+  border-radius: 50%;
+  transition:
+    transform 0.1s,
+    background 0.15s,
+    opacity 0.15s;
+}
+.microfone svg,
+.enviar svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+.microfone {
+  background: linear-gradient(135deg, var(--roxo), var(--roxo-forte));
+  color: #fff;
+}
+.microfone:active,
+.enviar:active {
+  transform: scale(0.94);
+}
+.microfone.ouvindo {
+  background: var(--vermelho);
+  animation: pulsar 1.4s infinite;
+}
+.enviar {
+  background: var(--superficie-2);
+  color: var(--roxo-claro);
+}
+.microfone:disabled,
+.enviar:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dica {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--texto-suave);
+}
+
+/* ------------------------------------------------------------------- ajuda */
+.ajuda {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(640px, calc(100dvh - 48px));
+  padding: 0;
+  border: 1px solid var(--borda);
+  border-radius: 20px;
+  background: var(--fundo-2);
+  color: var(--texto);
+  box-shadow: var(--sombra);
+}
+.ajuda::backdrop {
+  background: rgba(5, 6, 15, 0.7);
+  backdrop-filter: blur(3px);
+}
+.ajuda header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--fundo-2);
+  border-bottom: 1px solid var(--borda);
+}
+.ajuda h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.ajuda header button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--superficie-2);
+  font-size: 1.1rem;
+}
+.ajuda ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 12px;
+  list-style: none;
+}
+.ajuda li button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--superficie);
+  text-align: left;
+}
+.ajuda li button:hover {
+  border-color: rgba(167, 139, 250, 0.45);
+  background: var(--superficie-2);
+}
+.ajuda li span {
+  color: var(--texto-suave);
+  font-size: 0.88rem;
+}
+.ajuda-vazia,
+.ajuda-rodape {
+  margin: 0;
+  padding: 12px 20px 18px;
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+}
+
+/* -------------------------------------------------------------- animações */
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes pular {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+@keyframes pulsar {
+  0% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 0 16px rgba(248, 113, 113, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .topo,
+  .conversa,
+  .rodape {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .balao {
+    max-width: 85%;
+  }
+}
