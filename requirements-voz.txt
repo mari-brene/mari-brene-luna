@@ -1,0 +1,6 @@
+# modo voz do cliente desktop
+-r requirements.txt
+SpeechRecognition>=3.10
+PyAudio>=0.2.13
+gTTS>=2.5
+playsound==1.2.2
