@@ -19,10 +19,12 @@ ESPERAS = (1.0, 2.5)                 # segundos entre as tentativas extras
 
 
 class ErroIA(Exception):
-    def __init__(self, mensagem: str, cota_esgotada: bool = False, temporario: bool = False):
+    def __init__(self, mensagem: str, cota_esgotada: bool = False, temporario: bool = False,
+                 modelo_inexistente: bool = False):
         super().__init__(mensagem)
         self.cota_esgotada = cota_esgotada
         self.temporario = temporario
+        self.modelo_inexistente = modelo_inexistente
 
 
 class ClienteGemini:
@@ -64,6 +66,8 @@ class ClienteGemini:
             raise ErroIA("cota do Gemini esgotada (429)", cota_esgotada=True)
         if resposta.status_code in TEMPORARIOS:
             raise ErroIA(f"Gemini indisponível ({resposta.status_code})", temporario=True)
+        if resposta.status_code == 404:
+            raise ErroIA(f"modelo {self.modelo} não encontrado (404)", modelo_inexistente=True)
         if resposta.status_code >= 400:
             raise ErroIA(f"Gemini respondeu {resposta.status_code}: {resposta.text[:300]}")
 

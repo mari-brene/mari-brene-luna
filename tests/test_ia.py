@@ -79,6 +79,13 @@ def test_com_chave_a_ia_e_criada(monkeypatch):
     assert conversa and conversa.cliente.modelo == "gemini-3.8-flash"
 
 
+def test_lista_de_modelos(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
+    monkeypatch.setenv("GEMINI_MODELO", " gemini-4-hydrogen , gemini-3.8-flash ,")
+    conversa = criar_conversa()
+    assert [c.modelo for c in conversa.clientes] == ["gemini-4-hydrogen", "gemini-3.8-flash"]
+
+
 # ------------------------------------------------------------ requisição
 def test_frase_desconhecida_vai_para_o_gemini(luna_ia, gemini):
     falso = gemini(ok("Júpiter, o grandalhão do sistema solar 🪐"))
@@ -213,3 +220,24 @@ def test_indisponivel_sempre_vira_fala_de_sobrecarga(luna_ia, gemini, status):
     assert r.habilidade is None
     assert "sobrecarregad" in r.texto.lower() or "503" in r.texto
     assert sessao.memoria_ia == []
+
+
+@pytest.mark.parametrize("falha_primeiro", [503, 404])
+def test_passa_para_o_proximo_modelo(monkeypatch, gemini, falha_primeiro):
+    monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
+    monkeypatch.setenv("GEMINI_MODELO", "modelo-a,modelo-b")
+    luna = Luna(carregar_config(), plataforma="web")
+    respostas = [RespostaFalsa(falha_primeiro, {"error": "x"})] * (3 if falha_primeiro == 503 else 1)
+    falso = gemini(*respostas, ok("Do modelo B."))
+    r = luna.processar("qual o maior planeta", Sessao("s" * 20))
+    assert r.texto == "Do modelo B."
+    assert "modelo-a" in falso.chamadas[0]["url"] and "modelo-b" in falso.chamadas[-1]["url"]
+
+
+def test_erro_de_chave_nao_tenta_outros_modelos(monkeypatch, gemini):
+    monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
+    monkeypatch.setenv("GEMINI_MODELO", "modelo-a,modelo-b")
+    luna = Luna(carregar_config(), plataforma="web")
+    falso = gemini(RespostaFalsa(403, {"error": "forbidden"}))
+    luna.processar("qual o maior planeta", Sessao("s" * 20))
+    assert len(falso.chamadas) == 1

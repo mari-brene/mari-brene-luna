@@ -3,7 +3,8 @@ IA de conversa: responde quando nenhuma habilidade reconhece a frase.
 
 Ativada pela variável GEMINI_API_KEY (sem ela, a Luna continua dizendo
 "não entendi"). Opcionais:
-    GEMINI_MODELO          modelo (padrão: gemini-3.8-flash)
+    GEMINI_MODELO          modelo, ou lista separada por vírgula tentada em ordem
+                           quando um está sobrecarregado (padrão: gemini-3.8-flash)
     LUNA_IA_POR_SESSAO     chamadas por sessão por hora (padrão: 20)
     LUNA_IA_POR_MINUTO     chamadas por minuto no total (padrão: 10)
 """
@@ -55,9 +56,28 @@ def _limpar(texto: str) -> str:
 class Conversa:
     """Fallback de IA usado pelo núcleo. Guarda um histórico curto por sessão."""
 
-    def __init__(self, cliente: ClienteGemini, limitador: LimitadorTaxa):
-        self.cliente = cliente
+    def __init__(self, cliente: ClienteGemini | list[ClienteGemini], limitador: LimitadorTaxa):
+        self.clientes = cliente if isinstance(cliente, list) else [cliente]
         self.limitador = limitador
+
+    @property
+    def cliente(self) -> ClienteGemini:
+        return self.clientes[0]
+
+    def _gerar(self, conversa: list[tuple[str, str]]) -> str:
+        """Tenta cada modelo da lista; passa para o próximo se o atual estiver indisponível."""
+        instrucoes = INSTRUCOES.format(agora=_agora())
+        ultimo_erro: ErroIA | None = None
+        for cliente in self.clientes:
+            try:
+                return cliente.gerar(instrucoes, conversa)
+            except ErroIA as erro:
+                ultimo_erro = erro
+                if not (erro.temporario or erro.modelo_inexistente):
+                    raise
+                log.warning("modelo %s indisponível (%s); tentando o próximo", cliente.modelo, erro)
+        assert ultimo_erro is not None
+        raise ultimo_erro
 
     def responder(self, frase: str, sessao) -> tuple[str | None, str | None]:
         """
@@ -69,7 +89,7 @@ class Conversa:
         historico: list[tuple[str, str]] = sessao.memoria_ia
         conversa = [*historico, ("user", frase)]
         try:
-            texto = _limpar(self.cliente.gerar(INSTRUCOES.format(agora=_agora()), conversa))
+            texto = _limpar(self._gerar(conversa))
         except ErroIA as erro:
             log.error("falha na IA: %s", erro)
             if erro.cota_esgotada:
@@ -86,13 +106,14 @@ def criar_conversa() -> Conversa | None:
     chave = os.environ.get("GEMINI_API_KEY", "").strip()
     if not chave:
         return None
-    cliente = ClienteGemini(chave, os.environ.get("GEMINI_MODELO", "").strip() or MODELO_PADRAO)
+    modelos = [m.strip() for m in os.environ.get("GEMINI_MODELO", "").split(",") if m.strip()] or [MODELO_PADRAO]
+    clientes = [ClienteGemini(chave, m) for m in modelos]
     limitador = LimitadorTaxa(
         por_sessao=int(os.environ.get("LUNA_IA_POR_SESSAO", 20)),
         global_por_minuto=int(os.environ.get("LUNA_IA_POR_MINUTO", 10)),
     )
-    log.info("IA ativada com o modelo %s", cliente.modelo)
-    return Conversa(cliente, limitador)
+    log.info("IA ativada com o(s) modelo(s) %s", ", ".join(modelos))
+    return Conversa(clientes, limitador)
 
 
 __all__ = ["Conversa", "ClienteGemini", "ErroIA", "LimitadorTaxa", "criar_conversa"]
