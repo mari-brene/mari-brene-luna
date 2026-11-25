@@ -99,9 +99,7 @@ curl -s localhost:8000/api/comando -H 'Content-Type: application/json' \
   - o CORS só libera as origens definidas em `LUNA_CORS_ORIGINS` (separadas por vírgula; o padrão é `http://localhost:3000`);
   - frases têm limite de 500 caracteres;
   - IDs de sessão inválidos são descartados.
-- **Limitações atuais:**
-  - as sessões ficam em memória (30 min de inatividade, no máximo 10 mil). Se o servidor reiniciar, perde-se só uma pergunta pendente, nunca os lembretes;
-  - os lembretes ficam em SQLite (`LUNA_DB`). Para hospedar em serverless, como o Vercel, o próximo passo é migrar para o Supabase.
+- **Sessões:** ficam em memória (30 min de inatividade, no máximo 10 mil). Se o servidor reiniciar, perde-se só uma pergunta pendente; os lembretes ficam no banco (veja "Lembretes no Supabase").
 
 ## Front-end web
 
@@ -141,7 +139,22 @@ python web/e2e/teste_front.py
 | API | Render | `render.yaml` na raiz (Blueprint). Defina `LUNA_CORS_ORIGINS` com a URL do front |
 | Front | Vercel | Root Directory `web`, framework Vite, variável `VITE_API_URL` com a URL da API |
 
-No plano gratuito do Render, o disco é apagado a cada deploy, então os lembretes em SQLite não sobrevivem. Para produção, o próximo passo é levar os lembretes para o Supabase.
+### Lembretes no Supabase
+
+Sem configuração, os lembretes ficam em SQLite (`dados/luna.db`), o que é ótimo no desktop e em desenvolvimento. Em produção, o disco do Render é apagado a cada deploy, então os lembretes vão para o **Supabase**:
+
+1. Crie um projeto no Supabase e rode `supabase/lembretes.sql` no SQL Editor. O arquivo cria a tabela com RLS ligado e sem policies, então só o backend acessa.
+2. Em **Project Settings → API Keys**, copie a URL do projeto e uma chave **secret** (`sb_secret_...`).
+3. No Render, defina `SUPABASE_URL` e `SUPABASE_SECRET_KEY`. Pronto: a API passa a usar o Supabase sozinha.
+
+A conexão é feita pela API REST (PostgREST) com `requests`, sem SDK. A chave secret vai **só** no header `apikey`, porque as chaves novas não são JWT. A chave legada `service_role` também é aceita.
+
+| Variável | Para quê |
+|---|---|
+| `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | ativam o Supabase (as duas juntas) |
+| `LUNA_DB` | caminho do SQLite quando o Supabase não está configurado |
+| `LUNA_FUSO` | fuso usado para mostrar as datas (padrão `America/Sao_Paulo`) |
+| `LUNA_CORS_ORIGINS` | origens liberadas no CORS |
 
 ## Configuração — `config.json`
 
@@ -175,6 +188,7 @@ luna/
     personalidade.py       todas as falas, piadas e easter eggs
     texto.py               normalização (sem acento/pontuação) com mapa para o texto original
   habilidades/             uma área por arquivo (sem efeitos colaterais: só montam a Resposta)
+  armazenamento/            onde os lembretes ficam: SQLite (local) ou Supabase (produção)
   web/
     api.py                 FastAPI: rotas, validação (Pydantic), CORS
     servico.py             casos de uso da web, sem depender de framework
@@ -189,7 +203,8 @@ web/                       front-end React + TypeScript (Vite)
   src/voz.ts               Web Speech API: escutar e falar
   src/acoes.ts             executa as ações no navegador
   e2e/teste_front.py       teste ponta a ponta no Chromium
-dados/luna.db              lembretes (SQLite; LUNA_DB muda o caminho)
+dados/luna.db              lembretes locais (SQLite; LUNA_DB muda o caminho)
+supabase/lembretes.sql     tabela de lembretes para produção
 ```
 
 ### Plataformas
@@ -234,9 +249,9 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-São 119 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+São 135 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
 
-- as APIs são simuladas e cada teste usa um SQLite temporário;
+- as APIs são simuladas e cada teste usa um SQLite temporário, e um PostgREST falso em memória testa o Supabase com os filtros e headers reais;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;
 - um teste garante que **o exemplo de cada habilidade aciona a própria habilidade**, para o "ajuda" nunca mentir;
 - a CI roda no GitHub Actions a cada push, com Python 3.10 a 3.15. O front passa por typecheck, build e pelo teste E2E no Chromium, que guarda as capturas de tela como artefato.

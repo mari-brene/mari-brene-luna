@@ -13,3 +13,7 @@ services:
         value: "3.12.7"
       - key: LUNA_CORS_ORIGINS
         sync: false # ex.: https://luna-web.vercel.app
+      - key: SUPABASE_URL
+        sync: false # ex.: https://xxxx.supabase.co
+      - key: SUPABASE_SECRET_KEY
+        sync: false # chave secret (sb_secret_...) — nunca no front-end
