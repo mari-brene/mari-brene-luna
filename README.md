@@ -235,7 +235,7 @@ São 119 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no si
 - as APIs são simuladas e cada teste usa um SQLite temporário;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;
 - um teste garante que **o exemplo de cada habilidade aciona a própria habilidade**, para o "ajuda" nunca mentir;
-- a CI roda no GitHub Actions a cada push, com Python 3.10 a 3.13. O front passa por typecheck, build e pelo teste E2E no Chromium, que guarda as capturas de tela como artefato.
+- a CI roda no GitHub Actions a cada push, com Python 3.10 a 3.15. O front passa por typecheck, build e pelo teste E2E no Chromium, que guarda as capturas de tela como artefato.
 
 ## APIs usadas (nenhuma exige chave)
 
