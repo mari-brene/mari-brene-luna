@@ -7,8 +7,10 @@ from luna.core.sessao import Sessao
 
 @pytest.fixture(autouse=True)
 def banco_temporario(tmp_path, monkeypatch):
-    """Cada teste usa um SQLite próprio, nunca o dados/luna.db de verdade."""
+    """Cada teste usa um SQLite próprio: nunca o dados/luna.db nem um Supabase de verdade."""
     monkeypatch.setenv("LUNA_DB", str(tmp_path / "luna_teste.db"))
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
 
 
 @pytest.fixture
