@@ -200,9 +200,9 @@ def test_limite_estourado_avisa_sem_chamar_o_gemini(gemini):
     falso = gemini()
     conversa = Conversa(ClienteGemini(CHAVE, "m"), LimitadorTaxa(por_sessao=1, global_por_minuto=100))
     sessao = Sessao("s" * 20)
-    assert conversa.responder("um", sessao)[0]
-    texto, fala = conversa.responder("dois", sessao)
-    assert texto is None and fala == "ia_limite" and len(falso.chamadas) == 1
+    assert conversa.responder("um", sessao).texto
+    segundo = conversa.responder("dois", sessao)
+    assert segundo.texto is None and segundo.fala == "ia_limite" and len(falso.chamadas) == 1
 
 
 def test_503_tenta_de_novo_e_funciona(luna_ia, gemini):
@@ -248,3 +248,92 @@ def test_log_mostra_a_mensagem_do_google(luna_ia, gemini, caplog):
     gemini(*[RespostaFalsa(503, corpo)] * 3)
     luna_ia.processar("qual o maior planeta", Sessao("s" * 20))
     assert "UNAVAILABLE The model is overloaded." in caplog.text
+
+
+# ------------------------------------------------------------ function calling
+def chama(frase, texto=""):
+    partes = ([{"text": texto}] if texto else []) + [
+        {"functionCall": {"name": "executar_comando", "args": {"frase": frase}}, "thoughtSignature": "abc"}
+    ]
+    return RespostaFalsa(200, {"candidates": [{"content": {"role": "model", "parts": partes}}]})
+
+
+def test_envia_a_ferramenta_e_os_exemplos_da_plataforma(luna_ia, gemini):
+    falso = gemini(ok("Oi!"))
+    luna_ia.processar("me fala algo", Sessao("s" * 20))
+    corpo = falso.chamadas[0]["json"]
+    [declaracao] = corpo["tools"][0]["functionDeclarations"]
+    assert declaracao["name"] == "executar_comando" and declaracao["parameters"]["required"] == ["frase"]
+    instrucoes = corpo["systemInstruction"]["parts"][0]["text"]
+    assert "Timer de 10 minutos" in instrucoes and "Lembrar de pagar a internet" in instrucoes
+    assert "Abrir Discord" not in instrucoes  # web não tem comandos de desktop
+
+
+def test_ia_transforma_pedido_livre_em_comando(luna_ia, gemini):
+    gemini(chama("lembrar de comprar pão depois do almoço"))
+    sessao = Sessao("s" * 20)
+    r = luna_ia.processar("lembra de comprar pão depois do almoço, por favor", sessao)
+    assert r.habilidade == "lembretes.criar" and r.via_ia is True
+    assert "comprar pão depois do almoço" in luna_ia.processar("ver lembretes", sessao).texto
+
+
+def test_prefere_a_chamada_ao_texto(luna_ia, gemini):
+    gemini(chama("que horas são", texto="Vou ver aqui!"))
+    r = luna_ia.processar("sabe me dizer as horas?", Sessao("s" * 20))
+    assert r.habilidade == "tempo.hora" and "Vou ver" not in r.texto
+
+
+def test_contexto_e_amanha_depois_do_clima(luna_ia, gemini, api_falsa):
+    from test_habilidades import _clima
+
+    api_falsa({"wttr.in": _clima(28, 90)})
+    falso = gemini(chama("clima amanhã em Curitiba"))
+    sessao = Sessao("s" * 20)
+    luna_ia.processar("clima em Curitiba", sessao)        # comando normal, sem IA
+    assert not falso.chamadas
+    r = luna_ia.processar("e amanhã?", sessao)             # IA usa a memória
+    enviados = [c["parts"][0]["text"] for c in falso.chamadas[0]["json"]["contents"]]
+    assert enviados[0] == "clima em Curitiba" and "Curitiba" in enviados[1] and enviados[-1] == "e amanhã?"
+    assert r.habilidade == "clima.clima" and r.via_ia and "amanhã em curitiba" in r.texto.lower()
+
+
+@pytest.mark.parametrize("perigoso", ["limpar lembretes", "apagar lembrete 1"])
+def test_comandos_destrutivos_exigem_frase_explicita(luna_ia, gemini, perigoso):
+    gemini(chama(perigoso))
+    sessao = Sessao("s" * 20)
+    luna_ia.processar("lembrar de não perder isso", sessao)
+    r = luna_ia.processar("some com tudo aí", sessao)
+    assert perigoso in r.texto and not r.via_ia
+    assert "não perder isso" in luna_ia.processar("ver lembretes", sessao).texto
+
+
+def test_desligar_pc_via_ia_bloqueado_no_desktop(monkeypatch, gemini):
+    monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
+    luna = Luna(carregar_config(), plataforma="desktop")
+    gemini(chama("desligar o computador em 10 minutos"))
+    r = luna.processar("apaga o pc daqui a pouco", Sessao("s" * 20))
+    assert not r.acoes and "desligar o computador" in r.texto
+
+
+def test_comando_sugerido_desconhecido_vira_nao_entendi(luna_ia, gemini):
+    falso = gemini(chama("fazer café expresso duplo"))
+    r = luna_ia.processar("faz um café pra mim", Sessao("s" * 20))
+    assert r.habilidade is None and r.falas and len(falso.chamadas) == 1  # sem recursão na IA
+
+
+def test_comando_via_ia_pode_perguntar(luna_ia, gemini):
+    gemini(chama("criar lembrete"))
+    sessao = Sessao("s" * 20)
+    r = luna_ia.processar("quero anotar uma coisa", sessao)
+    assert r.aguardando_resposta and r.via_ia
+    luna_ia.processar("ligar pro dentista", sessao)
+    assert "ligar pro dentista" in luna_ia.processar("ver lembretes", sessao).texto
+
+
+def test_via_ia_chega_na_saida_da_api(monkeypatch, gemini):
+    from luna.web.servico import ServicoLuna
+
+    monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
+    gemini(chama("tocar Queen"))
+    saida = ServicoLuna().comando("quero ouvir aquela banda do Freddie Mercury")
+    assert saida["via_ia"] is True and saida["acoes"][0]["tipo"] == "abrir_url"

@@ -24,7 +24,32 @@ RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ))
 os.environ["LUNA_DB"] = str(Path(tempfile.mkdtemp()) / "e2e.db")
 
+os.environ["GEMINI_API_KEY"] = "chave-de-teste"  # IA ligada, com o Gemini simulado abaixo
+
+import requests  # noqa: E402
 from playwright.sync_api import expect, sync_playwright  # noqa: E402
+
+
+class _RespostaGemini:
+    status_code = 200
+    text = ""
+
+    def __init__(self, partes):
+        self._dados = {"candidates": [{"content": {"role": "model", "parts": partes}}]}
+
+    def json(self):
+        return self._dados
+
+
+def _gemini_falso(url, json=None, headers=None, timeout=None):
+    """Gemini simulado: pede música -> chama a ferramenta; o resto -> conversa."""
+    frase = json["contents"][-1]["parts"][0]["text"].lower()
+    if "freddie mercury" in frase:
+        return _RespostaGemini([{"functionCall": {"name": "executar_comando", "args": {"frase": "tocar Queen"}}}])
+    return _RespostaGemini([{"text": "Júpiter, o grandalhão do sistema solar 🪐"}])
+
+
+requests.post = _gemini_falso
 
 from luna.web.servico import FraseInvalida, ServicoLuna  # noqa: E402
 
@@ -299,7 +324,18 @@ with sync_playwright() as p:
     expect(page.locator(".status")).to_contain_text("online")
     ok("aviso de 'acordando' aparece após 3,5 s e some com a resposta")
 
-    print("18. celular")
+    print("18. IA: conversa e comando interpretado")
+    r = enviar(page, "qual o maior planeta do sistema solar")
+    assert "Júpiter" in r and "✨ IA" in r, r
+    r = enviar(page, "quero ouvir aquela banda do Freddie Mercury")
+    assert "Queen" in r and "✨ IA" in r, r
+    expect(ultima_luna(page).get_by_role("link", name="Abrir no Spotify ↗")).to_be_visible()
+    r = enviar(page, "que horas são")
+    assert "✨ IA" not in r  # comando local não leva o selo
+    page.screenshot(path=SHOTS / "8-ia.png")
+    ok("selo ✨ IA só nas respostas da IA; pedido livre virou comando de música")
+
+    print("19. celular")
     page.set_viewport_size({"width": 390, "height": 780})
     page.wait_for_timeout(300)
     largura = page.evaluate("document.documentElement.scrollWidth")
@@ -310,11 +346,15 @@ with sync_playwright() as p:
     page.set_viewport_size({"width": 1280, "height": 820})
     enviar(page, "oi")
     page.screenshot(path=SHOTS / "6-conversa.png")
-    # horário nunca sobrepõe o texto do balão
-    for balao in page.locator(".balao:not(.digitando)").all():
-        caixa_p = balao.locator("p").last.bounding_box()
-        caixa_h = balao.locator(".hora").bounding_box()
-        assert caixa_h["y"] >= caixa_p["y"] + caixa_p["height"] - 1, "horário sobre o texto"
+    # horário nunca sobrepõe o texto do balão (mede tudo de uma vez: a rolagem suave muda as posições)
+    sobrepostos = page.evaluate("""() => [...document.querySelectorAll('.balao:not(.digitando)')]
+        .filter(b => {
+            const p = [...b.querySelectorAll('p')].pop().getBoundingClientRect();
+            const h = b.querySelector('.hora').getBoundingClientRect();
+            return h.top < p.bottom - 1;
+        })
+        .map(b => b.innerText.slice(0, 60))""")
+    assert not sobrepostos, f"horário sobre o texto: {sobrepostos}"
     nav.close()
 
     erros = [e for e in erros if "ERR_CONNECTION_REFUSED" not in e and "Failed to load resource" not in e]
