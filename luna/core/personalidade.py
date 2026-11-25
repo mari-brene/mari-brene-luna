@@ -46,6 +46,10 @@ FALAS: dict[str, list[str]] = {
         "Meu cérebro de IA tá sobrecarregado agora, muita gente pensando junto 😵‍💫 Tenta de novo em alguns segundos?",
         "O servidor do Gemini deu 503. Não fui eu, juro! Pergunta de novo daqui a pouco.",
     ],
+    "confirmar_comando": [
+        "Isso é sério demais pra eu fazer por interpretação 😅 Se quiser mesmo, diz assim: '{frase}'.",
+        "Por segurança, esse comando eu só executo se você falar direitinho: '{frase}'.",
+    ],
     "erro": [
         "Deu ruim aqui dentro. Não foi culpa sua... provavelmente. 🐛",
         "Exception não tratada no meu cérebro. Tenta de novo?",

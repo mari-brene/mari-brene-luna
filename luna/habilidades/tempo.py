@@ -47,7 +47,8 @@ def pomodoro(ctx):
     ctx.dizer("pomodoro_ok", foco=foco, pausa=pausa)
 
 
-@habilidade(r"\bcancelar (?:os )?(?:timers?|pomodoro|alarmes?)\b", descricao="Cancela timers", prioridade=5)
+@habilidade(r"\bcancelar (?:os )?(?:timers?|pomodoro|alarmes?)\b", descricao="Cancela timers",
+            exemplo="Cancelar timer", prioridade=5)
 def cancelar_timers(ctx):
     # quem guarda os timers é o cliente; aqui só pedimos o cancelamento
     ctx.acao("cancelar_timers")

@@ -13,12 +13,15 @@ import platform as _platform
 import re
 
 from .contexto import Contexto
-from .registro import encontrar
+from .registro import disponiveis, encontrar
 from .resposta import Resposta
 from .sessao import Sessao
 from .texto import normalizar
 
 log = logging.getLogger("luna")
+
+# a IA pode sugerir comandos, mas estes só valem se o usuário disser explicitamente
+BLOQUEADOS_VIA_IA = {"sistema.desligar", "lembretes.limpar", "lembretes.apagar"}
 
 # frases que desistem de uma pergunta pendente ("deixa pra lá")
 _DESISTIR = re.compile(r"^(?:cancela(?:r)?|deixa (?:pra|para) la|esquece|nada|nao)$")
@@ -61,8 +64,14 @@ class Luna:
             sessao.registrar(frase, ctx.resposta.habilidade)
             return ctx.resposta
 
-        ctx.resposta.habilidade = hab.nome
         sessao.registrar(frase, hab.nome)
+        self._executar(ctx, hab, args)
+        self._lembrar(sessao, frase, ctx.resposta)
+        return ctx.resposta
+
+    @staticmethod
+    def _executar(ctx: Contexto, hab, args: dict) -> None:
+        ctx.resposta.habilidade = hab.nome
         try:
             hab.funcao(ctx, **args)
         except Exception:  # uma habilidade com erro não derruba a assistente
@@ -70,19 +79,38 @@ class Luna:
             ctx.resposta.falas.clear()
             ctx.resposta.acoes.clear()
             ctx.dizer("erro")
-        return ctx.resposta
+
+    def _lembrar(self, sessao: Sessao, frase: str, resposta: Resposta) -> None:
+        """Comandos também entram na memória da IA, para ela entender "e amanhã?"."""
+        if self.ia is not None and not resposta.aguardando_resposta:
+            self.ia.lembrar(sessao, frase, resposta.texto)
 
     def _sem_comando(self, ctx: Contexto, frase: str) -> None:
-        """Nenhuma habilidade reconheceu a frase: a IA responde, se estiver ligada."""
+        """Nenhuma habilidade reconheceu a frase: a IA conversa ou traduz para um comando."""
         if self.ia is None:
             ctx.dizer("nao_entendi")
             return
-        texto, chave_fala = self.ia.responder(frase, ctx.sessao)
-        if texto:
+        exemplos = [h.exemplo for h in disponiveis(self.plataforma) if h.exemplo]
+        resultado = self.ia.responder(frase, ctx.sessao, exemplos=exemplos)
+
+        if resultado.comando:
+            hab, args, comando = encontrar(resultado.comando, plataforma=self.plataforma)
+            if hab is None:
+                log.info("comando sugerido pela IA não reconhecido: %r", resultado.comando)
+                ctx.dizer("nao_entendi")
+                return
+            if hab.nome in BLOQUEADOS_VIA_IA:
+                ctx.dizer("confirmar_comando", frase=resultado.comando)
+                return
+            ctx.comando_atual = comando
+            ctx.resposta.via_ia = True
+            self._executar(ctx, hab, args)
+            self._lembrar(ctx.sessao, frase, ctx.resposta)
+        elif resultado.texto:
             ctx.resposta.habilidade = "ia.conversa"
-            ctx.falar(texto)
+            ctx.falar(resultado.texto)
         else:
-            ctx.dizer(chave_fala or "nao_entendi")
+            ctx.dizer(resultado.fala or "nao_entendi")
 
     def _continuar(self, frase: str, sessao: Sessao) -> Resposta:
         pendente, sessao.pendente = sessao.pendente, None
@@ -97,4 +125,5 @@ class Luna:
         except Exception:
             log.exception("erro na continuação %s", pendente.continuar.__name__)
             ctx.dizer("erro")
+        self._lembrar(sessao, frase, ctx.resposta)
         return ctx.resposta

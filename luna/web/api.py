@@ -49,6 +49,7 @@ class RespostaSaida(BaseModel):
     habilidade: str | None
     aguardando_resposta: bool
     idioma_escuta: str | None
+    via_ia: bool = False
 
 
 class HabilidadeSaida(BaseModel):

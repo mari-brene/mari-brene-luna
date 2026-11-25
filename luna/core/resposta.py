@@ -38,6 +38,7 @@ class Resposta:
     habilidade: str | None = None       # nome da habilidade que respondeu (útil em testes/logs)
     aguardando_resposta: bool = False   # a Luna fez uma pergunta e espera a próxima frase
     idioma_escuta: str | None = None    # ex.: "en-US" quando a próxima frase será em inglês
+    via_ia: bool = False                # o comando foi entendido pela IA (frase fora do padrão)
 
     @property
     def texto(self) -> str:

@@ -7,6 +7,7 @@ nomes mudam com frequência (GEMINI_MODELO).
 
 import logging
 import time
+from dataclasses import dataclass
 
 import requests
 
@@ -27,6 +28,12 @@ class ErroIA(Exception):
         self.modelo_inexistente = modelo_inexistente
 
 
+@dataclass
+class RespostaModelo:
+    texto: str = ""
+    chamada: tuple[str, dict] | None = None  # (nome da função, argumentos)
+
+
 class ClienteGemini:
     def __init__(self, chave: str, modelo: str, max_tokens: int = 400):
         self.chave = chave
@@ -34,16 +41,20 @@ class ClienteGemini:
         self.max_tokens = max_tokens
         self._usar_thinking = True  # desliga sozinho se o modelo não aceitar
 
-    def gerar(self, instrucoes: str, conversa: list[tuple[str, str]]) -> str:
+    def gerar(self, instrucoes: str, conversa: list[tuple[str, str]],
+              ferramentas: list[dict] | None = None) -> RespostaModelo:
         """
         conversa: [(papel, texto)] com papel "user" ou "model", terminando no usuário.
-        Devolve só o texto da resposta (sem os "pensamentos" do modelo).
+        ferramentas: declarações de funções (function calling) que o modelo pode chamar.
+        Devolve o texto (sem os "pensamentos" do modelo) e/ou a função chamada.
         """
         corpo = {
             "systemInstruction": {"parts": [{"text": instrucoes}]},
             "contents": [{"role": papel, "parts": [{"text": texto}]} for papel, texto in conversa],
             "generationConfig": {"maxOutputTokens": self.max_tokens, "temperature": 0.9},
         }
+        if ferramentas:
+            corpo["tools"] = [{"functionDeclarations": ferramentas}]
         if self._usar_thinking:
             corpo["generationConfig"]["thinkingConfig"] = {"thinkingLevel": "low"}  # mais rápido
 
@@ -83,10 +94,16 @@ class ClienteGemini:
                 pass
             raise ErroIA(f"resposta sem texto do Gemini {motivo}".strip()) from erro
 
-        texto = "".join(p.get("text", "") for p in partes if not p.get("thought"))
-        if not texto.strip():
+        chamada = None
+        for parte in partes:
+            funcao = parte.get("functionCall")
+            if isinstance(funcao, dict) and funcao.get("name"):
+                chamada = (funcao["name"], funcao.get("args") or {})
+                break
+        texto = "".join(p.get("text", "") for p in partes if not p.get("thought")).strip()
+        if not texto and not chamada:
             raise ErroIA("Gemini devolveu texto vazio")
-        return texto.strip()
+        return RespostaModelo(texto=texto, chamada=chamada)
 
     @staticmethod
     def _motivo(resposta: requests.Response) -> str:
