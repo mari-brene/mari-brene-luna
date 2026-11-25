@@ -19,3 +19,5 @@ services:
         sync: false # chave secret (sb_secret_...) — nunca no front-end
       - key: GEMINI_API_KEY
         sync: false # Google AI Studio; ativa a IA quando nenhum comando reconhece a frase
+      - key: XAI_API_KEY
+        sync: false # opcional: Grok (xAI), usado quando o Gemini estiver sem cota

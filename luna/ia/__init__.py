@@ -8,10 +8,14 @@ do almoço"; "e amanhã?" depois de clima em Curitiba -> "clima amanhã em
 Curitiba"). Quem executa é sempre o roteador normal: a IA não tem acesso
 direto a nada.
 
-Ativada pela variável GEMINI_API_KEY (sem ela, a Luna continua dizendo
-"não entendi"). Opcionais:
-    GEMINI_MODELO          modelo, ou lista separada por vírgula tentada em ordem
-                           quando um está sobrecarregado (padrão: gemini-3.8-flash)
+Provedores (cada um ativado pela sua chave; sem nenhuma, a Luna continua
+dizendo "não entendi"). Os modelos são tentados em ordem: se um estiver
+sobrecarregado, sem cota ou não existir, passa para o próximo.
+    GEMINI_API_KEY + GEMINI_MODELO   Google Gemini (padrão: gemini-3.8-flash)
+    XAI_API_KEY    + XAI_MODELO      Grok, da xAI (padrão: grok-4-1-fast-reasoning)
+    *_MODELO aceita lista separada por vírgula.
+Opcionais:
+    LUNA_IA_ORDEM          ordem dos provedores (padrão: gemini,grok)
     LUNA_IA_POR_SESSAO     chamadas por sessão por hora (padrão: 20)
     LUNA_IA_POR_MINUTO     chamadas por minuto no total (padrão: 10)
 """
@@ -24,10 +28,13 @@ from dataclasses import dataclass
 from ..core.relogio import agora as relogio_agora
 from .gemini import ClienteGemini, ErroIA, RespostaModelo
 from .limites import LimitadorTaxa
+from .openai_compat import ClienteOpenAICompat
 
 log = logging.getLogger("luna.ia")
 
 MODELO_PADRAO = "gemini-3.8-flash"
+MODELO_PADRAO_GROK = "grok-4-1-fast-reasoning"
+URL_XAI = "https://api.x.ai/v1"
 TURNOS_DE_MEMORIA = 6       # pares pergunta/resposta lembrados por sessão
 TAMANHO_MAXIMO = 700        # caracteres falados, no máximo
 TAMANHO_MAXIMO_COMANDO = 200
@@ -97,12 +104,12 @@ def _limpar(texto: str) -> str:
 class Conversa:
     """Fallback de IA usado pelo núcleo. Guarda um histórico curto por sessão."""
 
-    def __init__(self, cliente: ClienteGemini | list[ClienteGemini], limitador: LimitadorTaxa):
+    def __init__(self, cliente, limitador: LimitadorTaxa):
         self.clientes = cliente if isinstance(cliente, list) else [cliente]
         self.limitador = limitador
 
     @property
-    def cliente(self) -> ClienteGemini:
+    def cliente(self):
         return self.clientes[0]
 
     def _gerar(self, conversa: list[tuple[str, str]], exemplos: list[str]) -> RespostaModelo:
@@ -118,7 +125,7 @@ class Conversa:
                 # cota (429) é por modelo: vale tentar o próximo também
                 if not (erro.temporario or erro.modelo_inexistente or erro.cota_esgotada):
                     raise
-                log.warning("modelo %s indisponível (%s); tentando o próximo", cliente.modelo, erro)
+                log.warning("modelo %s indisponível (%s); tentando o próximo", _nome(cliente), erro)
         assert ultimo_erro is not None
         raise ultimo_erro
 
@@ -156,18 +163,42 @@ class Conversa:
         del sessao.memoria_ia[: -2 * TURNOS_DE_MEMORIA]
 
 
-def criar_conversa() -> Conversa | None:
+def _nome(cliente) -> str:
+    return repr(cliente) if isinstance(cliente, ClienteOpenAICompat) else f"gemini:{cliente.modelo}"
+
+
+def _lista(variavel: str, padrao: str) -> list[str]:
+    valor = os.environ.get(variavel, "").strip() or padrao
+    return [m.strip() for m in valor.split(",") if m.strip()]
+
+
+def _clientes_gemini() -> list:
     chave = os.environ.get("GEMINI_API_KEY", "").strip()
+    return [ClienteGemini(chave, m) for m in _lista("GEMINI_MODELO", MODELO_PADRAO)] if chave else []
+
+
+def _clientes_grok() -> list:
+    chave = os.environ.get("XAI_API_KEY", "").strip()
     if not chave:
+        return []
+    return [ClienteOpenAICompat(chave, m, URL_XAI, "grok") for m in _lista("XAI_MODELO", MODELO_PADRAO_GROK)]
+
+
+PROVEDORES = {"gemini": _clientes_gemini, "grok": _clientes_grok}
+
+
+def criar_conversa() -> Conversa | None:
+    ordem = _lista("LUNA_IA_ORDEM", "gemini,grok")
+    clientes = [c for nome in ordem if nome in PROVEDORES for c in PROVEDORES[nome]()]
+    if not clientes:
         return None
-    modelos = [m.strip() for m in os.environ.get("GEMINI_MODELO", "").split(",") if m.strip()] or [MODELO_PADRAO]
-    clientes = [ClienteGemini(chave, m) for m in modelos]
     limitador = LimitadorTaxa(
         por_sessao=int(os.environ.get("LUNA_IA_POR_SESSAO", 20)),
         global_por_minuto=int(os.environ.get("LUNA_IA_POR_MINUTO", 10)),
     )
-    log.info("IA ativada com o(s) modelo(s) %s", ", ".join(modelos))
+    log.info("IA ativada com o(s) modelo(s) %s", ", ".join(_nome(c) for c in clientes))
     return Conversa(clientes, limitador)
 
 
-__all__ = ["Conversa", "ClienteGemini", "ErroIA", "LimitadorTaxa", "ResultadoIA", "criar_conversa", "FERRAMENTA"]
+__all__ = ["Conversa", "ClienteGemini", "ClienteOpenAICompat", "ErroIA", "LimitadorTaxa", "ResultadoIA",
+           "criar_conversa", "FERRAMENTA"]

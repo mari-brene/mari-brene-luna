@@ -346,3 +346,100 @@ def test_cota_esgotada_em_todos_os_modelos(monkeypatch, gemini):
     falso = gemini(*[RespostaFalsa(429, {"error": {"status": "RESOURCE_EXHAUSTED"}})] * 2)
     r = luna.processar("qual o maior planeta", Sessao("s" * 20))
     assert len(falso.chamadas) == 2 and any(p in r.texto.lower() for p in ("cota", "rate limit"))
+
+
+# ------------------------------------------------------------ Grok (formato OpenAI)
+def grok_ok(texto=None, frase_comando=None):
+    mensagem = {"role": "assistant", "content": texto}
+    if frase_comando:
+        mensagem["tool_calls"] = [{"id": "c1", "type": "function", "function": {
+            "name": "executar_comando", "arguments": json.dumps({"frase": frase_comando})}}]
+    return RespostaFalsa(200, {"choices": [{"message": mensagem}]})
+
+
+class Roteador:
+    """requests.post falso que responde conforme o provedor da URL."""
+
+    def __init__(self, gemini=(), grok=()):
+        self.filas = {"googleapis": list(gemini), "x.ai": list(grok)}
+        self.chamadas = []
+
+    def __call__(self, url, json=None, headers=None, timeout=None):
+        provedor = "x.ai" if "x.ai" in url else "googleapis"
+        self.chamadas.append({"provedor": provedor, "url": url, "json": copy.deepcopy(json), "headers": headers})
+        return self.filas[provedor].pop(0)
+
+
+@pytest.fixture
+def roteador(monkeypatch):
+    def configurar(**filas):
+        r = Roteador(**filas)
+        monkeypatch.setattr("requests.post", r)
+        return r
+    return configurar
+
+
+def test_so_grok_configurado(monkeypatch, roteador):
+    monkeypatch.setenv("XAI_API_KEY", "xai-teste")
+    rot = roteador(grok=[grok_ok("Júpiter, fácil.")])
+    luna = Luna(carregar_config(), plataforma="web")
+    r = luna.processar("qual o maior planeta", Sessao("s" * 20))
+    assert r.texto == "Júpiter, fácil." and r.habilidade == "ia.conversa"
+    [chamada] = rot.chamadas
+    assert chamada["url"] == "https://api.x.ai/v1/chat/completions"
+    assert chamada["headers"]["Authorization"] == "Bearer xai-teste"
+    corpo = chamada["json"]
+    assert corpo["model"] == "grok-4-1-fast-reasoning"
+    assert corpo["messages"][0]["role"] == "system" and "Luna" in corpo["messages"][0]["content"]
+    assert corpo["messages"][-1] == {"role": "user", "content": "qual o maior planeta"}
+    assert corpo["tools"][0]["type"] == "function" and corpo["tools"][0]["function"]["name"] == "executar_comando"
+
+
+def test_grok_chama_ferramenta(monkeypatch, roteador):
+    monkeypatch.setenv("XAI_API_KEY", "xai-teste")
+    roteador(grok=[grok_ok(frase_comando="tocar Queen")])
+    luna = Luna(carregar_config(), plataforma="web")
+    r = luna.processar("quero ouvir aquela banda do Freddie Mercury", Sessao("s" * 20))
+    assert r.via_ia and r.acoes[0].dados["url"].endswith("/search/Queen")
+
+
+def test_grok_memoria_vira_assistant(monkeypatch, roteador):
+    monkeypatch.setenv("XAI_API_KEY", "xai-teste")
+    rot = roteador(grok=[grok_ok("Júpiter."), grok_ok("95 luas.")])
+    luna = Luna(carregar_config(), plataforma="web")
+    sessao = Sessao("s" * 20)
+    luna.processar("qual o maior planeta", sessao)
+    luna.processar("e quantas luas ele tem", sessao)
+    papeis = [m["role"] for m in rot.chamadas[1]["json"]["messages"]]
+    assert papeis == ["system", "user", "assistant", "user"]
+
+
+def test_gemini_sem_cota_passa_para_o_grok(monkeypatch, roteador):
+    monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
+    monkeypatch.setenv("XAI_API_KEY", "xai-teste")
+    rot = roteador(gemini=[RespostaFalsa(429, {"error": {"status": "RESOURCE_EXHAUSTED"}})],
+                   grok=[grok_ok("Grok assumiu.")])
+    luna = Luna(carregar_config(), plataforma="web")
+    r = luna.processar("qual o maior planeta", Sessao("s" * 20))
+    assert r.texto == "Grok assumiu."
+    assert [c["provedor"] for c in rot.chamadas] == ["googleapis", "x.ai"]
+
+
+def test_ordem_dos_provedores_configuravel(monkeypatch, roteador):
+    monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
+    monkeypatch.setenv("XAI_API_KEY", "xai-teste")
+    monkeypatch.setenv("LUNA_IA_ORDEM", "grok,gemini")
+    rot = roteador(grok=[grok_ok("Primeiro o Grok.")])
+    luna = Luna(carregar_config(), plataforma="web")
+    assert luna.processar("qual o maior planeta", Sessao("s" * 20)).texto == "Primeiro o Grok."
+    assert [c["provedor"] for c in rot.chamadas] == ["x.ai"]
+
+
+@pytest.mark.parametrize("status, fala", [(402, ("cota", "rate limit")), (429, ("cota", "rate limit")),
+                                          (401, ("código", "404", "entendi", "dois segundos"))])
+def test_grok_erros(monkeypatch, roteador, status, fala):
+    monkeypatch.setenv("XAI_API_KEY", "xai-teste")
+    roteador(grok=[RespostaFalsa(status, {"error": {"message": "x"}})])
+    luna = Luna(carregar_config(), plataforma="web")
+    r = luna.processar("qual o maior planeta", Sessao("s" * 20))
+    assert r.habilidade is None and any(p in r.texto.lower() for p in fala), r.texto
