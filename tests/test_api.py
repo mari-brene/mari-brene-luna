@@ -16,6 +16,11 @@ def cliente(monkeypatch):
     return TestClient(criar_app())
 
 
+def test_raiz_redireciona_para_docs(cliente):
+    r = cliente.get("/", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == "/docs"
+
+
 def test_saude(cliente):
     assert cliente.get("/api/saude").json() == {"status": "ok"}
 

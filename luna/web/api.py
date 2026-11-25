@@ -14,6 +14,7 @@ import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from .servico import TAMANHO_MAXIMO_FRASE, FraseInvalida, ServicoLuna
@@ -74,6 +75,10 @@ def criar_app(servico: ServicoLuna | None = None) -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
     )
+
+    @app.get("/", include_in_schema=False)
+    def raiz() -> RedirectResponse:
+        return RedirectResponse(url="/docs")
 
     @app.get("/api/saude", tags=["infra"])
     def saude() -> dict:
