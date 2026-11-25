@@ -54,6 +54,11 @@ def gemini(monkeypatch):
     return configurar
 
 
+@pytest.fixture(autouse=True)
+def sem_espera(monkeypatch):
+    monkeypatch.setattr(ClienteGemini, "_dormir", staticmethod(lambda s: None))
+
+
 @pytest.fixture
 def luna_ia(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
@@ -137,7 +142,7 @@ def test_cota_esgotada(luna_ia, gemini):
 
 @pytest.mark.parametrize("falha", [
     requests.ConnectionError("sem rede"),
-    RespostaFalsa(500, {"error": "interno"}),
+    RespostaFalsa(403, {"error": "permission denied"}),
     RespostaFalsa(200, {"promptFeedback": {"blockReason": "SAFETY"}}),
     RespostaFalsa(200, {"candidates": [{"content": {"parts": [{"text": "  "}]}}]}),
 ])
@@ -191,3 +196,20 @@ def test_limite_estourado_avisa_sem_chamar_o_gemini(gemini):
     assert conversa.responder("um", sessao)[0]
     texto, fala = conversa.responder("dois", sessao)
     assert texto is None and fala == "ia_limite" and len(falso.chamadas) == 1
+
+
+def test_503_tenta_de_novo_e_funciona(luna_ia, gemini):
+    falso = gemini(RespostaFalsa(503, {"error": "overloaded"}), ok("Júpiter!"))
+    r = luna_ia.processar("qual o maior planeta", Sessao("s" * 20))
+    assert r.texto == "Júpiter!" and len(falso.chamadas) == 2
+
+
+@pytest.mark.parametrize("status", [500, 502, 503, 504])
+def test_indisponivel_sempre_vira_fala_de_sobrecarga(luna_ia, gemini, status):
+    falso = gemini(*[RespostaFalsa(status, {"error": "x"})] * 3)
+    sessao = Sessao("s" * 20)
+    r = luna_ia.processar("qual o maior planeta", sessao)
+    assert len(falso.chamadas) == 3  # 1 + 2 tentativas extras
+    assert r.habilidade is None
+    assert "sobrecarregad" in r.texto.lower() or "503" in r.texto
+    assert sessao.memoria_ia == []

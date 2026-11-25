@@ -42,6 +42,10 @@ FALAS: dict[str, list[str]] = {
         "Meu cérebro de IA tá sem cota agora. Tenta daqui a pouco, ou usa um comando: diz 'ajuda'.",
         "Rate limit no meu neurônio artificial. Volta em um minutinho?",
     ],
+    "ia_sobrecarregada": [
+        "Meu cérebro de IA tá sobrecarregado agora, muita gente pensando junto 😵‍💫 Tenta de novo em alguns segundos?",
+        "O servidor do Gemini deu 503. Não fui eu, juro! Pergunta de novo daqui a pouco.",
+    ],
     "erro": [
         "Deu ruim aqui dentro. Não foi culpa sua... provavelmente. 🐛",
         "Exception não tratada no meu cérebro. Tenta de novo?",

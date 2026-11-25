@@ -6,6 +6,7 @@ nomes mudam com frequência (GEMINI_MODELO).
 """
 
 import logging
+import time
 
 import requests
 
@@ -13,12 +14,15 @@ log = logging.getLogger("luna.ia")
 
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
 TIMEOUT = 20
+TEMPORARIOS = {500, 502, 503, 504}   # sobrecarga do lado do Google: vale tentar de novo
+ESPERAS = (1.0, 2.5)                 # segundos entre as tentativas extras
 
 
 class ErroIA(Exception):
-    def __init__(self, mensagem: str, cota_esgotada: bool = False):
+    def __init__(self, mensagem: str, cota_esgotada: bool = False, temporario: bool = False):
         super().__init__(mensagem)
         self.cota_esgotada = cota_esgotada
+        self.temporario = temporario
 
 
 class ClienteGemini:
@@ -49,8 +53,17 @@ class ClienteGemini:
             corpo["generationConfig"].pop("thinkingConfig", None)
             resposta = self._post(corpo)
 
+        for espera in ESPERAS:
+            if resposta.status_code not in TEMPORARIOS:
+                break
+            log.warning("Gemini respondeu %s; tentando de novo em %.1fs", resposta.status_code, espera)
+            self._dormir(espera)
+            resposta = self._post(corpo)
+
         if resposta.status_code == 429:
             raise ErroIA("cota do Gemini esgotada (429)", cota_esgotada=True)
+        if resposta.status_code in TEMPORARIOS:
+            raise ErroIA(f"Gemini indisponível ({resposta.status_code})", temporario=True)
         if resposta.status_code >= 400:
             raise ErroIA(f"Gemini respondeu {resposta.status_code}: {resposta.text[:300]}")
 
@@ -69,6 +82,10 @@ class ClienteGemini:
         if not texto.strip():
             raise ErroIA("Gemini devolveu texto vazio")
         return texto.strip()
+
+    @staticmethod
+    def _dormir(segundos: float) -> None:
+        time.sleep(segundos)
 
     def _post(self, corpo: dict) -> requests.Response:
         try:

@@ -172,7 +172,7 @@ Quando nenhuma habilidade reconhece a frase, a Luna pode responder usando o **Ge
 - **Implementação:** chamada REST ao `generateContent`, sem SDK (`luna/ia/`). Instruções de sistema com a persona, histórico curto por sessão, os "pensamentos" do modelo descartados, markdown removido e resposta cortada para caber na fala.
 - **Proteção da cota:** limite por sessão (`LUNA_IA_POR_SESSAO`, padrão 20 por hora) e global (`LUNA_IA_POR_MINUTO`, padrão 10 por minuto). Quando estoura, a Luna avisa com humor e os comandos continuam funcionando.
 - **Modelo:** `GEMINI_MODELO` (padrão `gemini-3.8-flash`). Se o modelo não aceitar `thinkingConfig`, o cliente repete a chamada sem ele.
-- **Falhas:** rede, cota (429), bloqueio de segurança ou resposta vazia viram uma fala amigável e um log no servidor; nunca derrubam a API.
+- **Falhas:** sobrecarga do Google (500 a 504) é tentada de novo até 2 vezes. Rede, cota (429), bloqueio de segurança ou resposta vazia viram uma fala amigável e um log no servidor; nunca derrubam a API.
 
 ## Configuração — `config.json`
 
@@ -268,7 +268,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-São 152 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+São 158 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
 
 - as APIs são simuladas e cada teste usa um SQLite temporário, e um PostgREST falso em memória testa o Supabase com os filtros e headers reais;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;

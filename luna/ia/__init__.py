@@ -62,7 +62,7 @@ class Conversa:
     def responder(self, frase: str, sessao) -> tuple[str | None, str | None]:
         """
         Devolve (texto, None) em caso de sucesso, ou (None, chave_de_fala) com
-        a fala a usar quando não deu: "ia_limite", "ia_cansada" ou "nao_entendi".
+        a fala a usar quando não deu: "ia_limite", "ia_cansada", "ia_sobrecarregada" ou "nao_entendi".
         """
         if not self.limitador.permitir(sessao.id):
             return None, "ia_limite"
@@ -72,7 +72,11 @@ class Conversa:
             texto = _limpar(self.cliente.gerar(INSTRUCOES.format(agora=_agora()), conversa))
         except ErroIA as erro:
             log.error("falha na IA: %s", erro)
-            return None, "ia_cansada" if erro.cota_esgotada else "nao_entendi"
+            if erro.cota_esgotada:
+                return None, "ia_cansada"
+            if erro.temporario:
+                return None, "ia_sobrecarregada"
+            return None, "nao_entendi"
         historico.extend([("user", frase), ("model", texto)])
         del historico[: -2 * TURNOS_DE_MEMORIA]
         return texto, None
