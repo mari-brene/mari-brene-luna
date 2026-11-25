@@ -2,6 +2,10 @@
 
 [![testes](https://github.com/mari-brene/mari-brene-luna/actions/workflows/testes.yml/badge.svg)](https://github.com/mari-brene/mari-brene-luna/actions/workflows/testes.yml)
 
+**🌐 Experimente: [mari-brene-luna.vercel.app](https://mari-brene-luna.vercel.app)** · API: [luna-api-p1kw.onrender.com/docs](https://luna-api-p1kw.onrender.com/docs)
+
+> A API roda no plano gratuito do Render e "dorme" depois de 15 minutos sem uso. A primeira mensagem pode levar até 50 segundos para acordar o servidor.
+
 A Luna é uma assistente de voz em português. Você chama pelo nome — **"Luna, que horas são?"** — e ela executa e responde falando. Também roda em **modo texto**, para desenvolver e testar sem microfone.
 
 ## Personalidade
