@@ -16,6 +16,7 @@ class Sessao:
     id: str = "local"
     pendente: Pendente | None = None
     historico: list[tuple[str, str]] = field(default_factory=list)  # (frase, habilidade)
+    memoria_ia: list[tuple[str, str]] = field(default_factory=list)  # (papel, texto) da conversa com a IA
 
     def registrar(self, frase: str, habilidade: str | None) -> None:
         self.historico.append((frase, habilidade or "-"))

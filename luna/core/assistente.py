@@ -27,6 +27,9 @@ _DESISTIR = re.compile(r"^(?:cancela(?:r)?|deixa (?:pra|para) la|esquece|nada|na
 class Luna:
     def __init__(self, config: dict, plataforma: str = "desktop"):
         from .. import habilidades  # noqa: F401  (registra as habilidades)
+        from ..ia import criar_conversa
+
+        self.ia = criar_conversa()  # None se GEMINI_API_KEY não estiver definida
 
         self.config = config
         self.plataforma = plataforma
@@ -54,8 +57,8 @@ class Luna:
         hab, args, comando = encontrar(frase, plataforma=self.plataforma)
         ctx = self._contexto(sessao, comando)
         if not hab:
-            ctx.dizer("nao_entendi")
-            sessao.registrar(frase, None)
+            self._sem_comando(ctx, frase)
+            sessao.registrar(frase, ctx.resposta.habilidade)
             return ctx.resposta
 
         ctx.resposta.habilidade = hab.nome
@@ -68,6 +71,18 @@ class Luna:
             ctx.resposta.acoes.clear()
             ctx.dizer("erro")
         return ctx.resposta
+
+    def _sem_comando(self, ctx: Contexto, frase: str) -> None:
+        """Nenhuma habilidade reconheceu a frase: a IA responde, se estiver ligada."""
+        if self.ia is None:
+            ctx.dizer("nao_entendi")
+            return
+        texto, chave_fala = self.ia.responder(frase, ctx.sessao)
+        if texto:
+            ctx.resposta.habilidade = "ia.conversa"
+            ctx.falar(texto)
+        else:
+            ctx.dizer(chave_fala or "nao_entendi")
 
     def _continuar(self, frase: str, sessao: Sessao) -> Resposta:
         pendente, sessao.pendente = sessao.pendente, None

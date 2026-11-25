@@ -34,6 +34,14 @@ FALAS: dict[str, list[str]] = {
         "404: comando não encontrado. Tenta 'ajuda'?",
         "Não entendi, mas fingi que sim por uns dois segundos. Diz 'ajuda' pra ver meus comandos.",
     ],
+    "ia_limite": [
+        "Calma, tagarela! Já conversamos bastante por agora. Meus comandos continuam funcionando, diz 'ajuda'.",
+        "Atingi minha cota de papo por hora 😅 Mas comandos como timer e lembretes seguem rodando.",
+    ],
+    "ia_cansada": [
+        "Meu cérebro de IA tá sem cota agora. Tenta daqui a pouco, ou usa um comando: diz 'ajuda'.",
+        "Rate limit no meu neurônio artificial. Volta em um minutinho?",
+    ],
     "erro": [
         "Deu ruim aqui dentro. Não foi culpa sua... provavelmente. 🐛",
         "Exception não tratada no meu cérebro. Tenta de novo?",
