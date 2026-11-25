@@ -58,18 +58,19 @@ class ClienteGemini:
         for espera in ESPERAS:
             if resposta.status_code not in TEMPORARIOS:
                 break
-            log.warning("Gemini respondeu %s; tentando de novo em %.1fs", resposta.status_code, espera)
+            log.warning("Gemini respondeu %s (%s) com %s; tentando de novo em %.1fs",
+                        resposta.status_code, self._motivo(resposta), self.modelo, espera)
             self._dormir(espera)
             resposta = self._post(corpo)
 
         if resposta.status_code == 429:
-            raise ErroIA("cota do Gemini esgotada (429)", cota_esgotada=True)
+            raise ErroIA(f"cota do Gemini esgotada (429): {self._motivo(resposta)}", cota_esgotada=True)
         if resposta.status_code in TEMPORARIOS:
-            raise ErroIA(f"Gemini indisponível ({resposta.status_code})", temporario=True)
+            raise ErroIA(f"Gemini indisponível ({resposta.status_code}): {self._motivo(resposta)}", temporario=True)
         if resposta.status_code == 404:
             raise ErroIA(f"modelo {self.modelo} não encontrado (404)", modelo_inexistente=True)
         if resposta.status_code >= 400:
-            raise ErroIA(f"Gemini respondeu {resposta.status_code}: {resposta.text[:300]}")
+            raise ErroIA(f"Gemini respondeu {resposta.status_code}: {self._motivo(resposta)}")
 
         try:
             dados = resposta.json()
@@ -86,6 +87,17 @@ class ClienteGemini:
         if not texto.strip():
             raise ErroIA("Gemini devolveu texto vazio")
         return texto.strip()
+
+    @staticmethod
+    def _motivo(resposta: requests.Response) -> str:
+        """Extrai a mensagem de erro do Google (error.status + error.message), se houver."""
+        try:
+            erro = resposta.json().get("error", {})
+            if isinstance(erro, dict) and (erro.get("message") or erro.get("status")):
+                return f"{erro.get('status', '')} {erro.get('message', '')}".strip()[:300]
+        except Exception:
+            pass
+        return resposta.text[:300]
 
     @staticmethod
     def _dormir(segundos: float) -> None:

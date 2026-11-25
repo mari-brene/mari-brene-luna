@@ -241,3 +241,10 @@ def test_erro_de_chave_nao_tenta_outros_modelos(monkeypatch, gemini):
     falso = gemini(RespostaFalsa(403, {"error": "forbidden"}))
     luna.processar("qual o maior planeta", Sessao("s" * 20))
     assert len(falso.chamadas) == 1
+
+
+def test_log_mostra_a_mensagem_do_google(luna_ia, gemini, caplog):
+    corpo = {"error": {"code": 503, "status": "UNAVAILABLE", "message": "The model is overloaded."}}
+    gemini(*[RespostaFalsa(503, corpo)] * 3)
+    luna_ia.processar("qual o maior planeta", Sessao("s" * 20))
+    assert "UNAVAILABLE The model is overloaded." in caplog.text
