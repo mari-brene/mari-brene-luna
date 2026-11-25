@@ -155,6 +155,24 @@ A conexão é feita pela API REST (PostgREST) com `requests`, sem SDK. A chave s
 | `LUNA_DB` | caminho do SQLite quando o Supabase não está configurado |
 | `LUNA_FUSO` | fuso usado para mostrar as datas (padrão `America/Sao_Paulo`) |
 | `LUNA_CORS_ORIGINS` | origens liberadas no CORS |
+| `GEMINI_API_KEY` | ativa a IA de conversa |
+| `GEMINI_MODELO`, `LUNA_IA_POR_SESSAO`, `LUNA_IA_POR_MINUTO` | modelo e limites da IA |
+
+## IA de conversa (Gemini)
+
+Quando nenhuma habilidade reconhece a frase, a Luna pode responder usando o **Gemini**, com a mesma personalidade e em respostas curtas, feitas para serem faladas. Sem chave, ela continua dizendo "não entendi".
+
+```
+"qual o maior planeta?"         → IA: "Júpiter, o grandalhão do sistema solar 🪐"
+"e quantas luas ele tem?"       → IA lembra do contexto (6 últimas trocas por sessão)
+"que horas são?"                → comando local, não gasta IA
+```
+
+- **Ativar:** crie uma chave grátis no Google AI Studio e defina `GEMINI_API_KEY` no servidor (no Render, nunca no front).
+- **Implementação:** chamada REST ao `generateContent`, sem SDK (`luna/ia/`). Instruções de sistema com a persona, histórico curto por sessão, os "pensamentos" do modelo descartados, markdown removido e resposta cortada para caber na fala.
+- **Proteção da cota:** limite por sessão (`LUNA_IA_POR_SESSAO`, padrão 20 por hora) e global (`LUNA_IA_POR_MINUTO`, padrão 10 por minuto). Quando estoura, a Luna avisa com humor e os comandos continuam funcionando.
+- **Modelo:** `GEMINI_MODELO` (padrão `gemini-3.8-flash`). Se o modelo não aceitar `thinkingConfig`, o cliente repete a chamada sem ele.
+- **Falhas:** rede, cota (429), bloqueio de segurança ou resposta vazia viram uma fala amigável e um log no servidor; nunca derrubam a API.
 
 ## Configuração — `config.json`
 
@@ -188,6 +206,7 @@ luna/
     personalidade.py       todas as falas, piadas e easter eggs
     texto.py               normalização (sem acento/pontuação) com mapa para o texto original
   habilidades/             uma área por arquivo (sem efeitos colaterais: só montam a Resposta)
+  ia/                      IA de conversa (Gemini via REST), persona e limites de uso
   armazenamento/            onde os lembretes ficam: SQLite (local) ou Supabase (produção)
   web/
     api.py                 FastAPI: rotas, validação (Pydantic), CORS
@@ -249,7 +268,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-São 135 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+São 152 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
 
 - as APIs são simuladas e cada teste usa um SQLite temporário, e um PostgREST falso em memória testa o Supabase com os filtros e headers reais;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;
@@ -262,4 +281,4 @@ AwesomeAPI (cotações) · wttr.in (clima) · Google News RSS (notícias) · Wik
 
 ## Tecnologias
 
-Python 3.10+ · FastAPI · Pydantic · React 19 · TypeScript · Vite · Web Speech API · Playwright · SpeechRecognition · PyAudio · gTTS · playsound · Beautiful Soup 4 · translate · requests · sqlite3 · threading
+Python 3.10+ · FastAPI · Pydantic · Gemini API · Supabase · React 19 · TypeScript · Vite · Web Speech API · Playwright · SpeechRecognition · PyAudio · gTTS · playsound · Beautiful Soup 4 · translate · requests · sqlite3 · threading

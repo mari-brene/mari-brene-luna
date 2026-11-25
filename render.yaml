@@ -17,3 +17,5 @@ services:
         sync: false # ex.: https://xxxx.supabase.co
       - key: SUPABASE_SECRET_KEY
         sync: false # chave secret (sb_secret_...) — nunca no front-end
+      - key: GEMINI_API_KEY
+        sync: false # Google AI Studio; ativa a IA quando nenhum comando reconhece a frase

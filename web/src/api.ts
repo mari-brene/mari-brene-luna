@@ -1,7 +1,7 @@
 import type { Habilidade, RespostaLuna } from "./tipos";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/+$/, "");
-const TEMPO_LIMITE_MS = 15_000;
+const TEMPO_LIMITE_MS = 60_000; // cobre o "acordar" do servidor gratuito e respostas da IA
 
 export class ErroApi extends Error {
   constructor(
