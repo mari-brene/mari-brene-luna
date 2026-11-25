@@ -11,6 +11,7 @@ def banco_temporario(tmp_path, monkeypatch):
     monkeypatch.setenv("LUNA_DB", str(tmp_path / "luna_teste.db"))
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
 
 @pytest.fixture
