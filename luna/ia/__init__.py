@@ -115,7 +115,8 @@ class Conversa:
                 return cliente.gerar(instrucoes, conversa, ferramentas=[FERRAMENTA])
             except ErroIA as erro:
                 ultimo_erro = erro
-                if not (erro.temporario or erro.modelo_inexistente):
+                # cota (429) é por modelo: vale tentar o próximo também
+                if not (erro.temporario or erro.modelo_inexistente or erro.cota_esgotada):
                     raise
                 log.warning("modelo %s indisponível (%s); tentando o próximo", cliente.modelo, erro)
         assert ultimo_erro is not None

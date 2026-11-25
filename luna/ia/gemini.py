@@ -16,7 +16,7 @@ log = logging.getLogger("luna.ia")
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
 TIMEOUT = 20
 TEMPORARIOS = {500, 502, 503, 504}   # sobrecarga do lado do Google: vale tentar de novo
-ESPERAS = (1.0, 2.5)                 # segundos entre as tentativas extras
+ESPERAS = (1.5,)                     # 1 tentativa extra só: cada chamada gasta cota do plano gratuito
 
 
 class ErroIA(Exception):

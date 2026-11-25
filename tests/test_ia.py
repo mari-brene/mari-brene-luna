@@ -213,21 +213,21 @@ def test_503_tenta_de_novo_e_funciona(luna_ia, gemini):
 
 @pytest.mark.parametrize("status", [500, 502, 503, 504])
 def test_indisponivel_sempre_vira_fala_de_sobrecarga(luna_ia, gemini, status):
-    falso = gemini(*[RespostaFalsa(status, {"error": "x"})] * 3)
+    falso = gemini(*[RespostaFalsa(status, {"error": "x"})] * 2)
     sessao = Sessao("s" * 20)
     r = luna_ia.processar("qual o maior planeta", sessao)
-    assert len(falso.chamadas) == 3  # 1 + 2 tentativas extras
+    assert len(falso.chamadas) == 2  # 1 + 1 tentativa extra (poupa cota)
     assert r.habilidade is None
     assert "sobrecarregad" in r.texto.lower() or "503" in r.texto
     assert sessao.memoria_ia == []
 
 
-@pytest.mark.parametrize("falha_primeiro", [503, 404])
+@pytest.mark.parametrize("falha_primeiro", [503, 404, 429])
 def test_passa_para_o_proximo_modelo(monkeypatch, gemini, falha_primeiro):
     monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
     monkeypatch.setenv("GEMINI_MODELO", "modelo-a,modelo-b")
     luna = Luna(carregar_config(), plataforma="web")
-    respostas = [RespostaFalsa(falha_primeiro, {"error": "x"})] * (3 if falha_primeiro == 503 else 1)
+    respostas = [RespostaFalsa(falha_primeiro, {"error": "x"})] * (2 if falha_primeiro == 503 else 1)
     falso = gemini(*respostas, ok("Do modelo B."))
     r = luna.processar("qual o maior planeta", Sessao("s" * 20))
     assert r.texto == "Do modelo B."
@@ -245,7 +245,7 @@ def test_erro_de_chave_nao_tenta_outros_modelos(monkeypatch, gemini):
 
 def test_log_mostra_a_mensagem_do_google(luna_ia, gemini, caplog):
     corpo = {"error": {"code": 503, "status": "UNAVAILABLE", "message": "The model is overloaded."}}
-    gemini(*[RespostaFalsa(503, corpo)] * 3)
+    gemini(*[RespostaFalsa(503, corpo)] * 2)
     luna_ia.processar("qual o maior planeta", Sessao("s" * 20))
     assert "UNAVAILABLE The model is overloaded." in caplog.text
 
@@ -337,3 +337,12 @@ def test_via_ia_chega_na_saida_da_api(monkeypatch, gemini):
     gemini(chama("tocar Queen"))
     saida = ServicoLuna().comando("quero ouvir aquela banda do Freddie Mercury")
     assert saida["via_ia"] is True and saida["acoes"][0]["tipo"] == "abrir_url"
+
+
+def test_cota_esgotada_em_todos_os_modelos(monkeypatch, gemini):
+    monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
+    monkeypatch.setenv("GEMINI_MODELO", "modelo-a,modelo-b")
+    luna = Luna(carregar_config(), plataforma="web")
+    falso = gemini(*[RespostaFalsa(429, {"error": {"status": "RESOURCE_EXHAUSTED"}})] * 2)
+    r = luna.processar("qual o maior planeta", Sessao("s" * 20))
+    assert len(falso.chamadas) == 2 and any(p in r.texto.lower() for p in ("cota", "rate limit"))
