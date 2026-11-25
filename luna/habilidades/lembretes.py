@@ -5,12 +5,15 @@ Onde ficam guardados (SQLite ou Supabase) é decidido em luna/armazenamento;
 aqui só existe a conversa.
 """
 
+import logging
 from functools import wraps
 
 from ..armazenamento import ErroArmazenamento, repositorio_lembretes
 from ..core.personalidade import fala
 from ..core.registro import habilidade
 from ..core.texto import para_numero
+
+log = logging.getLogger("luna.lembretes")
 
 
 def _protegido(funcao):
@@ -19,7 +22,8 @@ def _protegido(funcao):
     def envolvida(ctx, *args, **kwargs):
         try:
             return funcao(ctx, *args, **kwargs)
-        except ErroArmazenamento:
+        except ErroArmazenamento as erro:
+            log.error("falha nos lembretes (%s): %s", funcao.__name__, erro)
             ctx.resposta.falas.clear()
             ctx.dizer("lembretes_erro")
     return envolvida

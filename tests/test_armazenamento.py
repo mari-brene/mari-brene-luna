@@ -171,9 +171,10 @@ def test_luna_usa_o_supabase_quando_configurado(luna, sessao, supabase):
     assert all("Authorization" not in c["headers"] for c in supabase.chamadas)
 
 
-def test_luna_avisa_quando_o_banco_falha(luna, sessao, supabase):
+def test_luna_avisa_quando_o_banco_falha(luna, sessao, supabase, caplog):
     supabase.fora_do_ar = True
     r = luna.processar("ver lembretes", sessao)
+    assert "Supabase inacessível" in caplog.text  # o motivo vai para o log do servidor
     assert r.habilidade == "lembretes.listar"
     assert len(r.falas) == 1 and "lembrete" in r.texto.lower()
 

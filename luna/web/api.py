@@ -10,6 +10,7 @@ Variáveis de ambiente:
     LUNA_DB             caminho do SQLite dos lembretes
 """
 
+import logging
 import os
 
 from fastapi import FastAPI, HTTPException
@@ -60,6 +61,9 @@ class HabilidadeSaida(BaseModel):
 def _origens_cors() -> list[str]:
     valor = os.environ.get("LUNA_CORS_ORIGINS", "http://localhost:3000")
     return [o.strip() for o in valor.split(",") if o.strip()]
+
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 
 def criar_app(servico: ServicoLuna | None = None) -> FastAPI:
