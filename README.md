@@ -268,7 +268,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-São 158 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+São 157 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
 
 - as APIs são simuladas e cada teste usa um SQLite temporário, e um PostgREST falso em memória testa o Supabase com os filtros e headers reais;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;
