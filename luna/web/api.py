@@ -66,6 +66,16 @@ def _origens_cors() -> list[str]:
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 
+class SemHealthCheck(logging.Filter):
+    """Tira do log de acesso as chamadas a /api/saude (o Render faz uma a cada poucos segundos)."""
+
+    def filter(self, registro: logging.LogRecord) -> bool:
+        return "/api/saude" not in registro.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(SemHealthCheck())
+
+
 def criar_app(servico: ServicoLuna | None = None) -> FastAPI:
     servico = servico or ServicoLuna()
     app = FastAPI(

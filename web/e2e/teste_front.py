@@ -32,7 +32,7 @@ BUILD = Path(os.environ.get("LUNA_BUILD", RAIZ / "web" / "dist"))
 SHOTS = Path(__file__).resolve().parent / "capturas"
 SHOTS.mkdir(exist_ok=True)
 servico = ServicoLuna()
-estado = {"api_fora": False, "chamadas": 0}
+estado = {"api_fora": False, "segurar": False, "presas": [], "chamadas": 0}
 
 MOCKS = r"""
 window.__falado = [];
@@ -76,6 +76,9 @@ def servir_front(route):
 
 
 def api(route):
+    if estado["segurar"] and route.request.method == "POST":
+        estado["presas"].append(route)  # simula o servidor dormindo: responde depois
+        return
     estado["chamadas"] += 1
     if estado["api_fora"]:
         return route.abort("connectionrefused")
@@ -280,7 +283,23 @@ with sync_playwright() as p:
     expect(page.locator(".aviso-erro")).to_have_count(0)
     ok("banner offline e reconexão")
 
-    print("17. celular")
+    print("17. servidor acordando")
+    estado["segurar"] = True
+    page.get_by_label("Mensagem para a Luna").fill("que horas são")
+    page.get_by_label("Mensagem para a Luna").press("Enter")
+    expect(page.locator(".aviso-info")).to_contain_text("dormindo", timeout=6000)
+    expect(page.locator(".status")).to_contain_text("acordando")
+    page.screenshot(path=SHOTS / "7-acordando.png")
+    estado["segurar"] = False
+    for presa in estado["presas"]:
+        api(presa)
+    estado["presas"].clear()
+    expect(page.locator(".aviso-info")).to_have_count(0)
+    expect(ultima_luna(page)).to_contain_text("h")
+    expect(page.locator(".status")).to_contain_text("online")
+    ok("aviso de 'acordando' aparece após 3,5 s e some com a resposta")
+
+    print("18. celular")
     page.set_viewport_size({"width": 390, "height": 780})
     page.wait_for_timeout(300)
     largura = page.evaluate("document.documentElement.scrollWidth")

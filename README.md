@@ -4,7 +4,7 @@
 
 **🌐 Experimente: [mari-brene-luna.vercel.app](https://mari-brene-luna.vercel.app)** · API: [luna-api-p1kw.onrender.com/docs](https://luna-api-p1kw.onrender.com/docs)
 
-> A API roda no plano gratuito do Render e "dorme" depois de 15 minutos sem uso. A primeira mensagem pode levar até 50 segundos para acordar o servidor.
+> A API roda no plano gratuito do Render, que desliga após 15 min sem uso. Um workflow agendado (`.github/workflows/manter-acordada.yml`) chama `/api/saude` a cada 10 min para mantê-la acordada; se mesmo assim ela estiver dormindo, o site avisa "acordando…" (até ~50 s).
 
 A Luna é uma assistente de voz em português. Você chama pelo nome — **"Luna, que horas são?"** — e ela executa e responde falando. Também roda em **modo texto**, para desenvolver e testar sem microfone.
 
@@ -124,7 +124,7 @@ npm run dev                   # http://localhost:3000 (com a API rodando)
 
 ### Teste ponta a ponta
 
-`web/e2e/teste_front.py` abre o **build de produção no Chromium** (Playwright) e conversa com o `ServicoLuna` real, com a voz simulada. São 17 cenários: texto, voz, pergunta com o microfone reabrindo, timers, links, ajuda, mudo, recarregar a página, isolamento entre usuários, servidor offline e layout no celular.
+`web/e2e/teste_front.py` abre o **build de produção no Chromium** (Playwright) e conversa com o `ServicoLuna` real, com a voz simulada. São 18 cenários: texto, voz, pergunta com o microfone reabrindo, timers, links, ajuda, mudo, recarregar a página, isolamento entre usuários, servidor offline, servidor acordando e layout no celular.
 
 ```bash
 cd web && npm run build && cd ..
@@ -269,7 +269,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-São 168 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+São 169 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
 
 - as APIs são simuladas e cada teste usa um SQLite temporário, e um PostgREST falso em memória testa o Supabase com os filtros e headers reais;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;

@@ -1,0 +1,21 @@
+name: manter a API acordada
+
+# O plano gratuito do Render desliga a API depois de 15 min sem uso, e acordar
+# leva até ~50 s. Uma chamada a cada 10 min evita que quem visita o site espere.
+# (Uma instância ligada 24/7 usa ~744 h/mês, dentro das 750 h gratuitas do Render.)
+# Para mudar a URL sem editar este arquivo: Settings → Variables → LUNA_API_URL.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: chamar /api/saude
+        env:
+          URL: ${{ vars.LUNA_API_URL || 'https://luna-api-p1kw.onrender.com' }}
+        run: curl -fsS --retry 3 --retry-delay 15 --retry-all-errors --max-time 90 "$URL/api/saude"

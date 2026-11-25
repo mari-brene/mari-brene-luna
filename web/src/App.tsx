@@ -14,6 +14,7 @@ type Origem = "texto" | "voz";
 
 const CHAVE_SESSAO = "luna:sessao";
 const CHAVE_MUDO = "luna:mudo";
+const DEMORA_PARA_AVISO_MS = 3500; // depois disso, provavelmente o servidor gratuito estava dormindo
 
 // localStorage pode lançar (modo privado, cookies bloqueados): nunca deixamos isso quebrar a app
 const ler = (chave: string): string | null => {
@@ -44,6 +45,7 @@ export function App() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [ajudaAberta, setAjudaAberta] = useState(false);
   const [habilidades, setHabilidades] = useState<Habilidade[]>([]);
+  const [acordando, setAcordando] = useState(false);
 
   const sessao = useRef<string | null>(ler(CHAVE_SESSAO));
   const mudoRef = useRef(mudo);
@@ -72,12 +74,23 @@ export function App() {
     void dizer(falas);
   });
 
+  /** Se a resposta demorar, avisa que a Luna está acordando (servidor gratuito em repouso). */
+  const avisandoDemora = useCallback(async <T,>(promessa: Promise<T>): Promise<T> => {
+    const relogio = window.setTimeout(() => setAcordando(true), DEMORA_PARA_AVISO_MS);
+    try {
+      return await promessa;
+    } finally {
+      window.clearTimeout(relogio);
+      setAcordando(false);
+    }
+  }, []);
+
   // ------------------------------------------------------------ conexão
   const conectar = useCallback(async () => {
     setStatus("conectando");
     setAviso(null);
     try {
-      const r = await iniciarSessao(sessao.current);
+      const r = await avisandoDemora(iniciarSessao(sessao.current));
       guardarSessao(r.sessao_id);
       setStatus("online");
       // saúda só quando a conversa está vazia (reconectar não repete a saudação)
@@ -88,7 +101,7 @@ export function App() {
     } catch {
       setStatus("offline");
     }
-  }, []);
+  }, [avisandoDemora]);
 
   useEffect(() => {
     if (iniciado.current) return; // StrictMode monta duas vezes em dev
@@ -143,7 +156,7 @@ export function App() {
     setPensando(true);
     setAviso(null);
     try {
-      const r = await enviarComando(frase, sessao.current);
+      const r = await avisandoDemora(enviarComando(frase, sessao.current));
       guardarSessao(r.sessao_id);
       setStatus("online");
       const links = executarAcoes(r.acoes, {
@@ -178,9 +191,9 @@ export function App() {
           <div className="lua" aria-hidden="true" />
           <div>
             <h1>Luna</h1>
-            <p className={`status status-${status}`}>
+            <p className={`status status-${acordando ? "conectando" : status}`}>
               <span className="ponto" aria-hidden="true" />
-              {ouvindo ? "ouvindo…" : pensando ? "pensando…" : rotuloStatus}
+              {acordando ? "acordando…" : ouvindo ? "ouvindo…" : pensando ? "pensando…" : rotuloStatus}
             </p>
           </div>
         </div>
@@ -207,6 +220,13 @@ export function App() {
         </div>
       </header>
 
+      {acordando && (
+        <div className="aviso aviso-info" role="status">
+          <span>
+            😴 A Luna estava dormindo. O servidor gratuito desliga quando ninguém usa, e acordar leva até 50 segundos.
+          </span>
+        </div>
+      )}
       {status === "offline" && (
         <div className="aviso aviso-erro" role="alert">
           <span>A Luna está offline. O servidor pode estar acordando.</span>

@@ -69,3 +69,14 @@ def test_cors_libera_so_a_origem_configurada(cliente):
 def test_docs_openapi(cliente):
     esquema = cliente.get("/openapi.json").json()
     assert "/api/comando" in esquema["paths"]
+
+
+def test_health_check_nao_polui_o_log():
+    import logging
+    from luna.web.api import SemHealthCheck
+
+    filtro = SemHealthCheck()
+    def registro(msg):
+        return logging.LogRecord("uvicorn.access", logging.INFO, "", 0, msg, None, None)
+    assert not filtro.filter(registro('10.0.0.1:123 - "GET /api/saude HTTP/1.1" 200'))
+    assert filtro.filter(registro('10.0.0.1:123 - "POST /api/comando HTTP/1.1" 200'))
