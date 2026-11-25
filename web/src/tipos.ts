@@ -18,6 +18,7 @@ export interface RespostaLuna {
   habilidade: string | null;
   aguardando_resposta: boolean;
   idioma_escuta: string | null;
+  via_ia?: boolean;
 }
 
 export interface Habilidade {
@@ -39,6 +40,7 @@ export interface Mensagem {
   falas: Fala[];
   links: Link[];
   hora: number;
+  ia?: boolean; // resposta passou pela IA (conversa ou comando interpretado)
 }
 
 export interface TimerAtivo {

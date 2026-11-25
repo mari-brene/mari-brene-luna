@@ -58,9 +58,9 @@ export function App() {
     gravar(CHAVE_SESSAO, id);
   };
 
-  const adicionar = useCallback((autor: Mensagem["autor"], falas: Fala[], links: Link[] = []) => {
+  const adicionar = useCallback((autor: Mensagem["autor"], falas: Fala[], links: Link[] = [], ia = false) => {
     if (falas.length === 0 && links.length === 0) return;
-    setMensagens((lista) => [...lista, { id: novoId(), autor, falas, links, hora: Date.now() }]);
+    setMensagens((lista) => [...lista, { id: novoId(), autor, falas, links, hora: Date.now(), ia }]);
   }, []);
 
   const dizer = useCallback(async (falas: Fala[]) => {
@@ -165,7 +165,7 @@ export function App() {
         encerrar: () => pararEscuta.current?.(),
       });
       setPensando(false);
-      adicionar("luna", r.falas, links);
+      adicionar("luna", r.falas, links, Boolean(r.via_ia) || r.habilidade === "ia.conversa");
       await dizer(r.falas);
       // se a Luna perguntou algo e a conversa era por voz, já abre o microfone
       if (r.aguardando_resposta && origem === "voz" && temMicrofone) ouvir(r.idioma_escuta ?? "pt-BR");

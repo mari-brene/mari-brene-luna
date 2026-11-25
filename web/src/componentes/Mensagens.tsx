@@ -36,9 +36,16 @@ export function Mensagens({ mensagens, pensando, parcial }: Props) {
                 ))}
               </div>
             )}
-            <time className="hora" dateTime={new Date(m.hora).toISOString()}>
-              {hora(m.hora)}
-            </time>
+            <div className="rodape-balao">
+              {m.ia && (
+                <span className="selo-ia" title="Resposta com ajuda da IA (Gemini)">
+                  ✨ IA
+                </span>
+              )}
+              <time className="hora" dateTime={new Date(m.hora).toISOString()}>
+                {hora(m.hora)}
+              </time>
+            </div>
           </div>
         </div>
       ))}

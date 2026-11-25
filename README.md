@@ -124,7 +124,7 @@ npm run dev                   # http://localhost:3000 (com a API rodando)
 
 ### Teste ponta a ponta
 
-`web/e2e/teste_front.py` abre o **build de produção no Chromium** (Playwright) e conversa com o `ServicoLuna` real, com a voz simulada. São 18 cenários: texto, voz, pergunta com o microfone reabrindo, timers, links, ajuda, mudo, recarregar a página, isolamento entre usuários, servidor offline, servidor acordando e layout no celular.
+`web/e2e/teste_front.py` abre o **build de produção no Chromium** (Playwright) e conversa com o `ServicoLuna` real, com a voz simulada. São 19 cenários: texto, voz, pergunta com o microfone reabrindo, timers, links, ajuda, mudo, recarregar a página, isolamento entre usuários, servidor offline, servidor acordando, IA (com Gemini simulado) e layout no celular.
 
 ```bash
 cd web && npm run build && cd ..
@@ -163,10 +163,21 @@ A conexão é feita pela API REST (PostgREST) com `requests`, sem SDK. A chave s
 Quando nenhuma habilidade reconhece a frase, a Luna pode responder usando o **Gemini**, com a mesma personalidade e em respostas curtas, feitas para serem faladas. Sem chave, ela continua dizendo "não entendi".
 
 ```
-"qual o maior planeta?"         → IA: "Júpiter, o grandalhão do sistema solar 🪐"
-"e quantas luas ele tem?"       → IA lembra do contexto (6 últimas trocas por sessão)
-"que horas são?"                → comando local, não gasta IA
+"qual o maior planeta?"                        → IA conversa: "Júpiter, o grandalhão do sistema solar 🪐"
+"e quantas luas ele tem?"                      → IA lembra do contexto (6 últimas trocas por sessão)
+"lembra de comprar pão depois do almoço, pfv"  → IA chama executar_comando("lembrar de comprar pão depois do almoço")
+"clima em Curitiba"  →  "e amanhã?"            → IA completa pelo contexto: "clima amanhã em Curitiba"
+"que horas são?"                               → comando local, não gasta IA
 ```
+
+### Function calling
+
+A IA recebe uma única ferramenta, `executar_comando(frase)`, e a lista de exemplos de comandos disponíveis na plataforma. Quando o pedido corresponde a um comando, ela **reescreve a frase no formato que o roteador entende**, e a frase passa pelo **mesmo roteador e pelas mesmas habilidades** de sempre. A IA nunca acessa nada diretamente.
+
+- **Memória compartilhada:** os comandos locais também entram na memória da conversa. Por isso o "e amanhã?" depois de "clima em Curitiba" funciona.
+- **Segurança:** comandos destrutivos (`desligar o computador`, `apagar lembrete`, `limpar lembretes`) **não são executados por interpretação**. A Luna pede que o usuário diga a frase explícita.
+- **Sem recursão:** se o comando sugerido não existir, a resposta é "não entendi"; a frase não volta para a IA.
+- A resposta traz `via_ia: true`, e o front mostra o selo **✨ IA**.
 
 - **Ativar:** crie uma chave grátis no Google AI Studio e defina `GEMINI_API_KEY` no servidor (no Render, nunca no front).
 - **Implementação:** chamada REST ao `generateContent`, sem SDK (`luna/ia/`). Instruções de sistema com a persona, histórico curto por sessão, os "pensamentos" do modelo descartados, markdown removido e resposta cortada para caber na fala.
@@ -269,7 +280,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-São 169 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+São 179 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
 
 - as APIs são simuladas e cada teste usa um SQLite temporário, e um PostgREST falso em memória testa o Supabase com os filtros e headers reais;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;

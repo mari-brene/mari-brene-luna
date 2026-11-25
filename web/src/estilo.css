@@ -238,9 +238,24 @@ h1 {
   padding-bottom: 10px;
 }
 
+.rodape-balao {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+.selo-ia {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(167, 139, 250, 0.18);
+  color: var(--roxo-claro);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
 .hora {
   display: block;
-  margin-top: 2px;
   text-align: right;
   font-size: 0.68rem;
   color: var(--texto-suave);
