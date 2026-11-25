@@ -2,3 +2,4 @@
 requests>=2.31
 beautifulsoup4>=4.12
 translate>=3.6
+tzdata>=2024.1          # fusos horários no Windows (zoneinfo)

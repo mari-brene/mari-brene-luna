@@ -1,47 +1,28 @@
-"""Lembretes e anotações persistidos em SQLite, separados por usuário (ctx.sessao.id)."""
+"""
+Lembretes e anotações, separados por usuário (ctx.sessao.id).
 
-import os
-import sqlite3
-from contextlib import contextmanager
-from datetime import datetime
-from typing import Iterator
+Onde ficam guardados (SQLite ou Supabase) é decidido em luna/armazenamento;
+aqui só existe a conversa.
+"""
 
-from ..core.contexto import DADOS
+from functools import wraps
+
+from ..armazenamento import ErroArmazenamento, repositorio_lembretes
 from ..core.personalidade import fala
 from ..core.registro import habilidade
 from ..core.texto import para_numero
 
-def _caminho_banco() -> str:
-    # LUNA_DB permite apontar para outro arquivo (ex.: nos testes)
-    return os.environ.get("LUNA_DB") or os.path.join(DADOS, "luna.db")
 
-
-@contextmanager
-def _conexao() -> Iterator[sqlite3.Connection]:
-    """Abre, faz commit (ou rollback) e fecha. Cria/migra a tabela se preciso."""
-    caminho = _caminho_banco()
-    os.makedirs(os.path.dirname(caminho), exist_ok=True)
-    con = sqlite3.connect(caminho)
-    try:
-        con.execute(
-            "CREATE TABLE IF NOT EXISTS lembretes ("
-            " id INTEGER PRIMARY KEY AUTOINCREMENT, texto TEXT NOT NULL, criado_em TEXT NOT NULL,"
-            " usuario TEXT NOT NULL DEFAULT 'local')"
-        )
-        colunas = {linha[1] for linha in con.execute("PRAGMA table_info(lembretes)")}
-        if "usuario" not in colunas:  # banco criado por versão antiga
-            con.execute("ALTER TABLE lembretes ADD COLUMN usuario TEXT NOT NULL DEFAULT 'local'")
-        con.execute("CREATE INDEX IF NOT EXISTS idx_lembretes_usuario ON lembretes (usuario)")
-        with con:
-            yield con
-    finally:
-        con.close()
-
-
-def _listar(con, usuario: str) -> list[tuple[int, str, str]]:
-    return con.execute(
-        "SELECT id, texto, criado_em FROM lembretes WHERE usuario = ? ORDER BY id", (usuario,)
-    ).fetchall()
+def _protegido(funcao):
+    """Banco fora do ar vira uma fala amigável, não um erro genérico."""
+    @wraps(funcao)
+    def envolvida(ctx, *args, **kwargs):
+        try:
+            return funcao(ctx, *args, **kwargs)
+        except ErroArmazenamento:
+            ctx.resposta.falas.clear()
+            ctx.dizer("lembretes_erro")
+    return envolvida
 
 
 @habilidade(
@@ -57,39 +38,36 @@ def criar(ctx, texto=None):
     _salvar(ctx, texto)
 
 
+@_protegido
 def _salvar(ctx, resposta: str):
-    texto = resposta
-    with _conexao() as con:
-        con.execute(
-            "INSERT INTO lembretes (texto, criado_em, usuario) VALUES (?, ?, ?)",
-            (texto, datetime.now().strftime("%d/%m %H:%M"), ctx.sessao.id),
-        )
-    ctx.dizer("lembrete_ok", texto=texto)
+    repositorio_lembretes().adicionar(ctx.sessao.id, resposta)
+    ctx.dizer("lembrete_ok", texto=resposta)
 
 
 @habilidade(
     r"\b(?:apagar|excluir|remover|concluir) (?:o )?lembrete (?:numero )?(?P<num>\w+)\b",
     descricao="Apaga um lembrete", exemplo="Apagar lembrete 2", prioridade=3,
 )
+@_protegido
 def apagar(ctx, num):
     n = para_numero(num)
-    with _conexao() as con:
-        lista = _listar(con, ctx.sessao.id)
-        if not n or not 1 <= n <= len(lista):
-            ctx.dizer("lembrete_inexistente")
-            return
-        id_, texto, _ = lista[int(n) - 1]
-        con.execute("DELETE FROM lembretes WHERE id = ?", (id_,))
-    ctx.dizer("lembrete_removido", texto=texto)
+    repo = repositorio_lembretes()
+    lista = repo.listar(ctx.sessao.id)
+    if not n or not 1 <= n <= len(lista):
+        ctx.dizer("lembrete_inexistente")
+        return
+    alvo = lista[int(n) - 1]
+    repo.remover(ctx.sessao.id, alvo.id)
+    ctx.dizer("lembrete_removido", texto=alvo.texto)
 
 
 @habilidade(
     r"\b(?:apagar|limpar|excluir) (?:todos )?(?:os )?lembretes\b",
     descricao="Apaga todos os lembretes", prioridade=2,
 )
+@_protegido
 def limpar(ctx):
-    with _conexao() as con:
-        con.execute("DELETE FROM lembretes WHERE usuario = ?", (ctx.sessao.id,))
+    repositorio_lembretes().limpar(ctx.sessao.id)
     ctx.dizer("lembretes_limpos")
 
 
@@ -98,12 +76,12 @@ def limpar(ctx):
     r"^(?:meus )?lembretes$",
     descricao="Lista lembretes", exemplo="Ver lembretes",
 )
+@_protegido
 def listar(ctx):
-    with _conexao() as con:
-        lista = _listar(con, ctx.sessao.id)
+    lista = repositorio_lembretes().listar(ctx.sessao.id)
     if not lista:
         ctx.dizer("lembrete_vazio")
         return
     ctx.dizer("lembrete_lista", n=len(lista), s="s" if len(lista) > 1 else "")
-    for i, (_, texto, quando) in enumerate(lista, 1):
-        ctx.falar(f"{i}. {texto} (anotado em {quando})")
+    for i, lembrete in enumerate(lista, 1):
+        ctx.falar(f"{i}. {lembrete.texto} (anotado em {lembrete.criado_em})")

@@ -107,6 +107,10 @@ FALAS: dict[str, list[str]] = {
     "lembrete_lista": ["Você tem {n} lembrete{s}:", "Achei {n} lembrete{s}:"],
     "lembrete_removido": ["Removido: {texto} 🗑️", "DELETE feito: {texto}. Um a menos!"],
     "lembrete_inexistente": ["Esse lembrete não existe.", "Índice fora do range! Esse número não tem lembrete."],
+    "lembretes_erro": [
+        "Não consegui acessar meu caderninho de lembretes agora. Tenta de novo daqui a pouco?",
+        "O banco de lembretes não respondeu. SELECT deu timeout 😵",
+    ],
     "lembretes_limpos": ["Todos os lembretes foram apagados.", "DROP nos lembretes. Tábula rasa! 🧹", "Apaguei tudo. Espero que você não precise de nada daquilo 👀"],
     # --------------------------------------------------------------- sistema
     "abrir_ok": ["Abrindo {alvo} 🚀", "Lá vem o {alvo}!", "Executando {alvo}..."],
