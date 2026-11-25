@@ -153,7 +153,7 @@ A conexão é feita pela API REST (PostgREST) com `requests`, sem SDK. A chave s
 |---|---|
 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | ativam o Supabase (as duas juntas) |
 | `LUNA_DB` | caminho do SQLite quando o Supabase não está configurado |
-| `LUNA_FUSO` | fuso usado para mostrar as datas (padrão `America/Sao_Paulo`) |
+| `LUNA_FUSO` | fuso da hora, da data e dos lembretes (padrão: `fuso_horario` do `config.json`, `America/Sao_Paulo`). O servidor roda em UTC, então a Luna nunca usa o relógio dele |
 | `LUNA_CORS_ORIGINS` | origens liberadas no CORS |
 | `GEMINI_API_KEY` | ativa a IA de conversa |
 | `GEMINI_MODELO`, `LUNA_IA_POR_SESSAO`, `LUNA_IA_POR_MINUTO` | modelo e limites da IA |
@@ -178,6 +178,7 @@ Quando nenhuma habilidade reconhece a frase, a Luna pode responder usando o **Ge
 
 - `nome` / `palavra_ativacao`: identidade e a palavra que a desperta
 - `cidade_padrao`: usada quando você pergunta só "clima"
+- `fuso_horario`: fuso da hora e da data faladas (o servidor pode estar em UTC)
 - `pomodoro`: minutos de foco e pausa
 - `programas` / `apelidos_programas`: o que ela consegue abrir, com o comando de cada sistema operacional (`Windows`, `Linux`, `Darwin`)
 
@@ -268,7 +269,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-São 162 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+São 168 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
 
 - as APIs são simuladas e cada teste usa um SQLite temporário, e um PostgREST falso em memória testa o Supabase com os filtros e headers reais;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;

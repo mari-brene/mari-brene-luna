@@ -4,17 +4,37 @@
   "idioma": "pt-BR",
   "voz_ativa": true,
   "cidade_padrao": "Joinville",
-  "pomodoro": { "foco_min": 25, "pausa_min": 5 },
+  "fuso_horario": "America/Sao_Paulo",
+  "pomodoro": {
+    "foco_min": 25,
+    "pausa_min": 5
+  },
   "programas": {
     "discord": {
       "Windows": "%LOCALAPPDATA%\\Discord\\Update.exe --processStart Discord.exe",
       "Linux": "discord",
       "Darwin": "open -a Discord"
     },
-    "vscode": { "Windows": "code", "Linux": "code", "Darwin": "open -a 'Visual Studio Code'" },
-    "chrome": { "Windows": "start chrome", "Linux": "google-chrome", "Darwin": "open -a 'Google Chrome'" },
-    "spotify": { "Windows": "start spotify:", "Linux": "spotify", "Darwin": "open -a Spotify" },
-    "calculadora": { "Windows": "calc", "Linux": "gnome-calculator", "Darwin": "open -a Calculator" }
+    "vscode": {
+      "Windows": "code",
+      "Linux": "code",
+      "Darwin": "open -a 'Visual Studio Code'"
+    },
+    "chrome": {
+      "Windows": "start chrome",
+      "Linux": "google-chrome",
+      "Darwin": "open -a 'Google Chrome'"
+    },
+    "spotify": {
+      "Windows": "start spotify:",
+      "Linux": "spotify",
+      "Darwin": "open -a Spotify"
+    },
+    "calculadora": {
+      "Windows": "calc",
+      "Linux": "gnome-calculator",
+      "Darwin": "open -a Calculator"
+    }
   },
   "apelidos_programas": {
     "vs code": "vscode",

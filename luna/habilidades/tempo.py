@@ -1,8 +1,7 @@
 """Hora, data, timer e pomodoro."""
 
-from datetime import datetime
-
 from ..core.personalidade import fala
+from ..core.relogio import agora as relogio_agora
 from ..core.registro import habilidade
 from ..core.texto import para_numero
 
@@ -12,13 +11,13 @@ MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
 
 @habilidade(r"\b(que horas|horas sao|horario)\b", descricao="Diz a hora", exemplo="Que horas são?")
 def hora(ctx):
-    agora = datetime.now()
+    agora = relogio_agora()
     ctx.dizer("hora", hora=f"{agora.hour}h{agora.minute:02d}")
 
 
 @habilidade(r"\b(que dia|data de hoje|dia e hoje)\b", descricao="Diz a data", exemplo="Que dia é hoje?")
 def data(ctx):
-    hoje = datetime.now()
+    hoje = relogio_agora()
     ctx.dizer("data", data=f"{DIAS[hoje.weekday()]}, {hoje.day} de {MESES[hoje.month - 1]} de {hoje.year}")
 
 

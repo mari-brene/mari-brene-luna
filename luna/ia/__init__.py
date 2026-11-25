@@ -12,8 +12,8 @@ Ativada pela variável GEMINI_API_KEY (sem ela, a Luna continua dizendo
 import logging
 import os
 import re
-from datetime import datetime
 
+from ..core.relogio import agora as relogio_agora
 from .gemini import ClienteGemini, ErroIA
 from .limites import LimitadorTaxa
 
@@ -38,7 +38,7 @@ Agora: {agora}."""
 
 
 def _agora() -> str:
-    d = datetime.now()
+    d = relogio_agora()
     return f"{DIAS[d.weekday()]}, {d.strftime('%d/%m/%Y %H:%M')}"
 
 

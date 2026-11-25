@@ -11,28 +11,21 @@ A tabela fica com RLS ligado e sem policies: só o backend (chave secret)
 consegue ler/gravar. Ver supabase/lembretes.sql.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 import requests
+
+from ..core.relogio import fuso as fuso_por_nome
 
 from .base import ErroArmazenamento, Lembrete
 
 TIMEOUT = 10
 
 
-def _fuso(nome: str):
-    try:
-        from zoneinfo import ZoneInfo
-
-        return ZoneInfo(nome)
-    except Exception:  # Windows sem o pacote tzdata, nome inválido...
-        return timezone(timedelta(hours=-3), "BRT")
-
-
 class LembretesSupabase:
-    def __init__(self, url: str, chave: str, fuso: str = "America/Sao_Paulo", tabela: str = "lembretes"):
+    def __init__(self, url: str, chave: str, fuso: str | None = None, tabela: str = "lembretes"):
         self.endpoint = f"{url.rstrip('/')}/rest/v1/{tabela}"
-        self.fuso = _fuso(fuso)
+        self.fuso = fuso_por_nome(fuso)
         self.headers = {"apikey": chave, "Content-Type": "application/json"}
         if chave.startswith("eyJ"):  # chave legada (JWT)
             self.headers["Authorization"] = f"Bearer {chave}"

@@ -3,9 +3,9 @@
 import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
 from typing import Iterator
 
+from ..core.relogio import agora
 from .base import ErroArmazenamento, Lembrete
 
 
@@ -42,7 +42,7 @@ class LembretesSQLite:
         with self._conexao() as con:
             con.execute(
                 "INSERT INTO lembretes (texto, criado_em, usuario) VALUES (?, ?, ?)",
-                (texto, datetime.now().strftime("%d/%m %H:%M"), usuario),
+                (texto, agora().strftime("%d/%m %H:%M"), usuario),
             )
 
     def listar(self, usuario: str) -> list[Lembrete]:
