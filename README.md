@@ -156,14 +156,14 @@ A conexão é feita pela API REST (PostgREST) com `requests`, sem SDK. A chave s
 | `LUNA_FUSO` | fuso da hora, da data e dos lembretes (padrão: `fuso_horario` do `config.json`, `America/Sao_Paulo`). O servidor roda em UTC, então a Luna nunca usa o relógio dele |
 | `LUNA_CORS_ORIGINS` | origens liberadas no CORS |
 | `GEMINI_API_KEY` | ativa a IA de conversa |
-| `XAI_API_KEY` | ativa o Grok (sozinho ou como reserva do Gemini) |
-| `GEMINI_MODELO`, `XAI_MODELO` | modelos de cada provedor (aceitam lista separada por vírgula) |
-| `LUNA_IA_ORDEM` | ordem dos provedores (padrão `gemini,grok`) |
+| `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `MISTRAL_API_KEY`, `OPENROUTER_API_KEY`, `XAI_API_KEY` | ativam os outros provedores |
+| `<PROVEDOR>_MODELO` | modelo(s) de cada provedor (lista separada por vírgula) |
+| `LUNA_IA_ORDEM` | ordem da fila (padrão `gemini,groq,cerebras,mistral,openrouter,grok`) |
 | `LUNA_IA_POR_SESSAO`, `LUNA_IA_POR_MINUTO` | limites de uso da IA |
 
-## IA de conversa (Gemini e Grok)
+## IA de conversa (vários provedores, gratuitos primeiro)
 
-Quando nenhuma habilidade reconhece a frase, a Luna pode responder usando o **Gemini** (e/ou o **Grok**), com a mesma personalidade e em respostas curtas, feitas para serem faladas. Sem chave, ela continua dizendo "não entendi".
+Quando nenhuma habilidade reconhece a frase, a Luna pode responder usando **vários provedores de IA em fila**, com a mesma personalidade e em respostas curtas, feitas para serem faladas. Sem chave, ela continua dizendo "não entendi".
 
 ```
 "qual o maior planeta?"                        → IA conversa: "Júpiter, o grandalhão do sistema solar 🪐"
@@ -182,10 +182,20 @@ A IA recebe uma única ferramenta, `executar_comando(frase)`, e a lista de exemp
 - **Sem recursão:** se o comando sugerido não existir, a resposta é "não entendi"; a frase não volta para a IA.
 - A resposta traz `via_ia: true`, e o front mostra o selo **✨ IA**.
 
-- **Ativar:** defina a chave de pelo menos um provedor no servidor (no Render, nunca no front):
-  - `GEMINI_API_KEY`: Google AI Studio, com plano gratuito;
-  - `XAI_API_KEY`: Grok, da xAI, cobrado por token, via API compatível com OpenAI (`luna/ia/openai_compat.py`).
-- **Vários provedores:** os modelos são tentados em ordem (`LUNA_IA_ORDEM`, padrão `gemini,grok`). Se o Gemini estiver sem cota, sobrecarregado ou sem o modelo, o Grok assume sozinho. Os dois usam a mesma persona, a mesma memória e a mesma ferramenta `executar_comando`.
+- **Ativar:** defina a chave de **pelo menos um** provedor no servidor (no Render, nunca no front). Só entram na fila os provedores que têm chave:
+
+  | Provedor | Chave | Modelo padrão | Plano |
+  |---|---|---|---|
+  | Google Gemini | `GEMINI_API_KEY` | `gemini-3.8-flash` | gratuito |
+  | Groq | `GROQ_API_KEY` | `openai/gpt-oss-120b` | gratuito |
+  | Cerebras | `CEREBRAS_API_KEY` | `gpt-oss-120b` | gratuito |
+  | Mistral | `MISTRAL_API_KEY` | `mistral-small-latest` | gratuito (dados usados para treino) |
+  | OpenRouter | `OPENROUTER_API_KEY` | `openrouter/free` | gratuito (modelos `:free`) |
+  | Grok (xAI) | `XAI_API_KEY` | `grok-4-1-fast-reasoning` | **pago** |
+
+  O modelo de cada um muda com `<PROVEDOR>_MODELO` (por exemplo `GROQ_MODELO`), que aceita uma lista separada por vírgula. Exceto o Gemini, todos usam o mesmo cliente no formato OpenAI (`luna/ia/openai_compat.py`).
+- **Fila com troca automática:** a ordem padrão é `gemini,groq,cerebras,mistral,openrouter,grok`, gratuitos primeiro e pago por último, e pode ser mudada em `LUNA_IA_ORDEM`. Quando um provedor fica sem cota (429), sobrecarregado (5xx) ou sem o modelo (404), o próximo responde, com a mesma persona, a mesma memória e a mesma ferramenta `executar_comando`.
+- **Pausa automática:** quem falhou sai da fila por um tempo (5 min sem cota, 1 min sobrecarregado, 6 h modelo inexistente), e as próximas mensagens vão direto para quem está funcionando, sem esperar. Se todos estiverem pausados, a Luna avisa na hora, sem gastar nenhuma chamada. Erros de chave (401/403) não passam para o próximo, para não esconder uma configuração errada.
 - **Implementação:** chamada REST ao `generateContent`, sem SDK (`luna/ia/`). Instruções de sistema com a persona, histórico curto por sessão, os "pensamentos" do modelo descartados, markdown removido e resposta cortada para caber na fala.
 - **Proteção da cota:** limite por sessão (`LUNA_IA_POR_SESSAO`, padrão 20 por hora) e global (`LUNA_IA_POR_MINUTO`, padrão 10 por minuto). Quando estoura, a Luna avisa com humor e os comandos continuam funcionando.
 - **Modelo:** `GEMINI_MODELO` (padrão `gemini-3.8-flash`). Aceita uma lista separada por vírgula, por exemplo `gemini-4-hydrogen,gemini-3.8-flash`: se um modelo estiver sobrecarregado (5xx) ou não existir (404), a Luna passa para o próximo. Se o modelo não aceitar `thinkingConfig`, o cliente repete a chamada sem ele.
@@ -286,7 +296,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-São 189 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+São 201 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
 
 - as APIs são simuladas e cada teste usa um SQLite temporário, e um PostgREST falso em memória testa o Supabase com os filtros e headers reais;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;
@@ -299,4 +309,4 @@ AwesomeAPI (cotações) · wttr.in (clima) · Google News RSS (notícias) · Wik
 
 ## Tecnologias
 
-Python 3.10+ · FastAPI · Pydantic · Gemini API · xAI (Grok) API · Supabase · React 19 · TypeScript · Vite · Web Speech API · Playwright · SpeechRecognition · PyAudio · gTTS · playsound · Beautiful Soup 4 · translate · requests · sqlite3 · threading
+Python 3.10+ · FastAPI · Pydantic · Gemini · Groq · Cerebras · Mistral · OpenRouter · Grok · Supabase · React 19 · TypeScript · Vite · Web Speech API · Playwright · SpeechRecognition · PyAudio · gTTS · playsound · Beautiful Soup 4 · translate · requests · sqlite3 · threading

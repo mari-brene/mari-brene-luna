@@ -443,3 +443,125 @@ def test_grok_erros(monkeypatch, roteador, status, fala):
     luna = Luna(carregar_config(), plataforma="web")
     r = luna.processar("qual o maior planeta", Sessao("s" * 20))
     assert r.habilidade is None and any(p in r.texto.lower() for p in fala), r.texto
+
+
+# ------------------------------------------------------------ vários provedores gratuitos
+class RoteadorMulti:
+    """requests.post falso: identifica o provedor pela URL e responde da fila dele."""
+
+    HOSTS = {"googleapis": "gemini", "groq.com": "groq", "cerebras.ai": "cerebras",
+             "mistral.ai": "mistral", "openrouter.ai": "openrouter", "x.ai": "grok"}
+
+    def __init__(self, **filas):
+        self.filas = {k: list(v) for k, v in filas.items()}
+        self.chamadas: list[str] = []
+
+    def __call__(self, url, json=None, headers=None, timeout=None):
+        provedor = next(p for host, p in self.HOSTS.items() if host in url)
+        self.chamadas.append(provedor)
+        fila = self.filas.get(provedor) or []
+        if fila:
+            return fila.pop(0)
+        padrao = f"resposta do {provedor}"
+        return ok(padrao) if provedor == "gemini" else grok_ok(padrao)  # cada um no seu formato
+
+
+@pytest.fixture
+def multi(monkeypatch):
+    def configurar(chaves: list[str], **filas):
+        variaveis = {"gemini": "GEMINI_API_KEY", "groq": "GROQ_API_KEY", "cerebras": "CEREBRAS_API_KEY",
+                     "mistral": "MISTRAL_API_KEY", "openrouter": "OPENROUTER_API_KEY", "grok": "XAI_API_KEY"}
+        for nome in chaves:
+            monkeypatch.setenv(variaveis[nome], f"chave-{nome}")
+        r = RoteadorMulti(**filas)
+        monkeypatch.setattr("requests.post", r)
+        return r
+    return configurar
+
+
+SEM_COTA = RespostaFalsa(429, {"error": {"message": "rate limit"}})
+
+
+@pytest.mark.parametrize("provedor, url, modelo", [
+    ("groq", "https://api.groq.com/openai/v1/chat/completions", "openai/gpt-oss-120b"),
+    ("cerebras", "https://api.cerebras.ai/v1/chat/completions", "gpt-oss-120b"),
+    ("mistral", "https://api.mistral.ai/v1/chat/completions", "mistral-small-latest"),
+    ("openrouter", "https://openrouter.ai/api/v1/chat/completions", "openrouter/free"),
+])
+def test_cada_provedor_gratuito_sozinho(monkeypatch, provedor, url, modelo):
+    variavel = {"groq": "GROQ_API_KEY", "cerebras": "CEREBRAS_API_KEY", "mistral": "MISTRAL_API_KEY",
+                "openrouter": "OPENROUTER_API_KEY"}[provedor]
+    monkeypatch.setenv(variavel, "chave-x")
+    conversa = criar_conversa()
+    [cliente] = conversa.clientes
+    assert cliente.url == url and cliente.modelo == modelo and cliente.provedor == provedor
+
+
+def test_ordem_padrao_gratuitos_primeiro_pago_por_ultimo(multi):
+    multi(["grok", "openrouter", "gemini", "groq", "cerebras", "mistral"])
+    nomes = [c.provedor if hasattr(c, "provedor") else "gemini" for c in criar_conversa().clientes]
+    assert nomes == ["gemini", "groq", "cerebras", "mistral", "openrouter", "grok"]
+
+
+def test_cascata_quando_as_cotas_acabam(multi):
+    rot = multi(["gemini", "groq", "cerebras"], gemini=[SEM_COTA], groq=[SEM_COTA])
+    luna = Luna(carregar_config(), plataforma="web")
+    r = luna.processar("qual o maior planeta", Sessao("s" * 20))
+    assert r.texto == "resposta do cerebras"
+    assert rot.chamadas == ["gemini", "groq", "cerebras"]
+
+
+def test_provedor_sem_cota_fica_pausado(multi):
+    rot = multi(["gemini", "groq"], gemini=[SEM_COTA])
+    luna = Luna(carregar_config(), plataforma="web")
+    sessao = Sessao("s" * 20)
+    luna.processar("pergunta um", sessao)
+    luna.processar("pergunta dois", sessao)
+    luna.processar("pergunta três", sessao)
+    # o Gemini só é tentado uma vez; depois as mensagens vão direto para o Groq
+    assert rot.chamadas == ["gemini", "groq", "groq", "groq"]
+    estado = {e["modelo"]: e["pausado_por_s"] for e in luna.ia.estado()}
+    assert estado["gemini:gemini-3.8-flash"] > 0 and estado["groq:openai/gpt-oss-120b"] == 0
+
+
+def test_pausa_expira_e_o_provedor_volta(multi):
+    rot = multi(["gemini", "groq"], gemini=[SEM_COTA])
+    luna = Luna(carregar_config(), plataforma="web")
+    relogio = [0.0]
+    luna.ia._relogio = lambda: relogio[0]
+    sessao = Sessao("s" * 20)
+    luna.processar("pergunta um", sessao)            # gemini 429 -> groq
+    relogio[0] = 5 * 60 + 1                          # passou a pausa de 5 min
+    r = luna.processar("pergunta dois", sessao)
+    assert rot.chamadas == ["gemini", "groq", "gemini"] and r.texto == "resposta do gemini"
+
+
+def test_todos_sem_cota_responde_sem_chamar_ninguem(multi):
+    rot = multi(["gemini", "groq"], gemini=[SEM_COTA], groq=[SEM_COTA])
+    luna = Luna(carregar_config(), plataforma="web")
+    sessao = Sessao("s" * 20)
+    luna.processar("pergunta um", sessao)
+    r = luna.processar("pergunta dois", sessao)
+    assert rot.chamadas == ["gemini", "groq"]       # a 2ª mensagem não gasta chamada nenhuma
+    assert any(p in r.texto.lower() for p in ("cota", "rate limit"))
+
+
+def test_modelo_inexistente_fica_fora_por_mais_tempo(multi):
+    multi(["gemini", "groq"], gemini=[RespostaFalsa(404, {"error": "not found"})])
+    luna = Luna(carregar_config(), plataforma="web")
+    luna.processar("pergunta um", Sessao("s" * 20))
+    estado = {e["modelo"]: e["pausado_por_s"] for e in luna.ia.estado()}
+    assert estado["gemini:gemini-3.8-flash"] > 60 * 60
+
+
+def test_erro_de_chave_nao_pausa_e_nao_cascateia(multi):
+    rot = multi(["groq", "cerebras"], groq=[RespostaFalsa(401, {"error": {"message": "invalid key"}})])
+    luna = Luna(carregar_config(), plataforma="web")
+    r = luna.processar("pergunta um", Sessao("s" * 20))
+    assert rot.chamadas == ["groq"] and r.habilidade is None
+
+
+def test_provedor_desconhecido_na_ordem_e_ignorado(multi, monkeypatch):
+    multi(["groq"])
+    monkeypatch.setenv("LUNA_IA_ORDEM", "inventado,groq")
+    assert [c.provedor for c in criar_conversa().clientes] == ["groq"]

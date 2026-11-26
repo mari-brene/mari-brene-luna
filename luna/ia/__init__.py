@@ -10,12 +10,20 @@ direto a nada.
 
 Provedores (cada um ativado pela sua chave; sem nenhuma, a Luna continua
 dizendo "não entendi"). Os modelos são tentados em ordem: se um estiver
-sobrecarregado, sem cota ou não existir, passa para o próximo.
-    GEMINI_API_KEY + GEMINI_MODELO   Google Gemini (padrão: gemini-3.8-flash)
-    XAI_API_KEY    + XAI_MODELO      Grok, da xAI (padrão: grok-4-1-fast-reasoning)
+sobrecarregado, sem cota ou não existir, passa para o próximo, e o que
+falhou fica "de castigo" por alguns minutos (não atrasa as próximas mensagens).
+
+    provedor    chave                 modelo (variável / padrão)               plano
+    gemini      GEMINI_API_KEY        GEMINI_MODELO / gemini-3.8-flash         gratuito
+    groq        GROQ_API_KEY          GROQ_MODELO / openai/gpt-oss-120b        gratuito
+    cerebras    CEREBRAS_API_KEY      CEREBRAS_MODELO / gpt-oss-120b           gratuito
+    mistral     MISTRAL_API_KEY       MISTRAL_MODELO / mistral-small-latest    gratuito
+    openrouter  OPENROUTER_API_KEY    OPENROUTER_MODELO / openrouter/free      gratuito (:free)
+    grok        XAI_API_KEY           XAI_MODELO / grok-4-1-fast-reasoning     pago
+
     *_MODELO aceita lista separada por vírgula.
 Opcionais:
-    LUNA_IA_ORDEM          ordem dos provedores (padrão: gemini,grok)
+    LUNA_IA_ORDEM          ordem (padrão: gemini,groq,cerebras,mistral,openrouter,grok)
     LUNA_IA_POR_SESSAO     chamadas por sessão por hora (padrão: 20)
     LUNA_IA_POR_MINUTO     chamadas por minuto no total (padrão: 10)
 """
@@ -23,6 +31,8 @@ Opcionais:
 import logging
 import os
 import re
+import threading
+import time
 from dataclasses import dataclass
 
 from ..core.relogio import agora as relogio_agora
@@ -33,8 +43,21 @@ from .openai_compat import ClienteOpenAICompat
 log = logging.getLogger("luna.ia")
 
 MODELO_PADRAO = "gemini-3.8-flash"
-MODELO_PADRAO_GROK = "grok-4-1-fast-reasoning"
-URL_XAI = "https://api.x.ai/v1"
+ORDEM_PADRAO = "gemini,groq,cerebras,mistral,openrouter,grok"  # gratuitos primeiro, pago por último
+
+# provedores no formato OpenAI: nome -> (variável da chave, variável do modelo, URL base, modelo padrão)
+COMPATIVEIS = {
+    "groq": ("GROQ_API_KEY", "GROQ_MODELO", "https://api.groq.com/openai/v1", "openai/gpt-oss-120b"),
+    "cerebras": ("CEREBRAS_API_KEY", "CEREBRAS_MODELO", "https://api.cerebras.ai/v1", "gpt-oss-120b"),
+    "mistral": ("MISTRAL_API_KEY", "MISTRAL_MODELO", "https://api.mistral.ai/v1", "mistral-small-latest"),
+    "openrouter": ("OPENROUTER_API_KEY", "OPENROUTER_MODELO", "https://openrouter.ai/api/v1", "openrouter/free"),
+    "grok": ("XAI_API_KEY", "XAI_MODELO", "https://api.x.ai/v1", "grok-4-1-fast-reasoning"),
+}
+
+# quanto tempo um modelo fica fora da fila depois de falhar (segundos)
+PAUSA_SEM_COTA = 5 * 60          # 429: cota por minuto/dia; volta a tentar em 5 min
+PAUSA_INDISPONIVEL = 60          # 5xx: sobrecarga passageira
+PAUSA_INEXISTENTE = 6 * 60 * 60  # 404: modelo não existe para essa chave
 TURNOS_DE_MEMORIA = 6       # pares pergunta/resposta lembrados por sessão
 TAMANHO_MAXIMO = 700        # caracteres falados, no máximo
 TAMANHO_MAXIMO_COMANDO = 200
@@ -104,9 +127,34 @@ def _limpar(texto: str) -> str:
 class Conversa:
     """Fallback de IA usado pelo núcleo. Guarda um histórico curto por sessão."""
 
-    def __init__(self, cliente, limitador: LimitadorTaxa):
+    def __init__(self, cliente, limitador: LimitadorTaxa, relogio=time.monotonic):
         self.clientes = cliente if isinstance(cliente, list) else [cliente]
         self.limitador = limitador
+        self._relogio = relogio
+        self._pausados: dict[int, float] = {}  # índice do cliente -> até quando fica fora
+        self._trava = threading.Lock()
+
+    def _disponiveis(self) -> list:
+        agora = self._relogio()
+        with self._trava:
+            return [c for i, c in enumerate(self.clientes) if self._pausados.get(i, 0) <= agora]
+
+    def _pausar(self, cliente, erro: ErroIA) -> None:
+        if erro.cota_esgotada:
+            segundos = PAUSA_SEM_COTA
+        elif erro.modelo_inexistente:
+            segundos = PAUSA_INEXISTENTE
+        else:
+            segundos = PAUSA_INDISPONIVEL
+        with self._trava:
+            self._pausados[self.clientes.index(cliente)] = self._relogio() + segundos
+        log.warning("%s fora da fila por %d s (%s)", _nome(cliente), segundos, erro)
+
+    def estado(self) -> list[dict]:
+        """Situação de cada modelo (para diagnóstico)."""
+        agora = self._relogio()
+        return [{"modelo": _nome(c), "pausado_por_s": max(0, round(self._pausados.get(i, 0) - agora))}
+                for i, c in enumerate(self.clientes)]
 
     @property
     def cliente(self):
@@ -116,16 +164,19 @@ class Conversa:
         """Tenta cada modelo da lista; passa para o próximo se o atual estiver indisponível."""
         lista = "\n".join(f"- {e}" for e in exemplos) or "- (nenhum)"
         instrucoes = INSTRUCOES.format(agora=_agora(), exemplos=lista)
+        candidatos = self._disponiveis()
+        if not candidatos:
+            raise ErroIA("todos os modelos estão pausados (sem cota/indisponíveis)", cota_esgotada=True)
         ultimo_erro: ErroIA | None = None
-        for cliente in self.clientes:
+        for cliente in candidatos:
             try:
                 return cliente.gerar(instrucoes, conversa, ferramentas=[FERRAMENTA])
             except ErroIA as erro:
                 ultimo_erro = erro
-                # cota (429) é por modelo: vale tentar o próximo também
+                # cota (429) é por modelo/provedor: vale tentar o próximo também
                 if not (erro.temporario or erro.modelo_inexistente or erro.cota_esgotada):
                     raise
-                log.warning("modelo %s indisponível (%s); tentando o próximo", _nome(cliente), erro)
+                self._pausar(cliente, erro)
         assert ultimo_erro is not None
         raise ultimo_erro
 
@@ -177,19 +228,26 @@ def _clientes_gemini() -> list:
     return [ClienteGemini(chave, m) for m in _lista("GEMINI_MODELO", MODELO_PADRAO)] if chave else []
 
 
-def _clientes_grok() -> list:
-    chave = os.environ.get("XAI_API_KEY", "").strip()
+def _clientes_compativeis(nome: str) -> list:
+    var_chave, var_modelo, url, padrao = COMPATIVEIS[nome]
+    chave = os.environ.get(var_chave, "").strip()
     if not chave:
         return []
-    return [ClienteOpenAICompat(chave, m, URL_XAI, "grok") for m in _lista("XAI_MODELO", MODELO_PADRAO_GROK)]
+    return [ClienteOpenAICompat(chave, m, url, nome) for m in _lista(var_modelo, padrao)]
 
 
-PROVEDORES = {"gemini": _clientes_gemini, "grok": _clientes_grok}
+def _clientes(nome: str) -> list:
+    if nome == "gemini":
+        return _clientes_gemini()
+    if nome in COMPATIVEIS:
+        return _clientes_compativeis(nome)
+    log.warning("provedor desconhecido em LUNA_IA_ORDEM: %s", nome)
+    return []
 
 
 def criar_conversa() -> Conversa | None:
-    ordem = _lista("LUNA_IA_ORDEM", "gemini,grok")
-    clientes = [c for nome in ordem if nome in PROVEDORES for c in PROVEDORES[nome]()]
+    ordem = _lista("LUNA_IA_ORDEM", ORDEM_PADRAO)
+    clientes = [c for nome in ordem for c in _clientes(nome)]
     if not clientes:
         return None
     limitador = LimitadorTaxa(
