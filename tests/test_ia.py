@@ -234,13 +234,13 @@ def test_passa_para_o_proximo_modelo(monkeypatch, gemini, falha_primeiro):
     assert "modelo-a" in falso.chamadas[0]["url"] and "modelo-b" in falso.chamadas[-1]["url"]
 
 
-def test_erro_de_chave_nao_tenta_outros_modelos(monkeypatch, gemini):
+def test_erro_de_permissao_tenta_o_proximo_modelo(monkeypatch, gemini):
     monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
     monkeypatch.setenv("GEMINI_MODELO", "modelo-a,modelo-b")
     luna = Luna(carregar_config(), plataforma="web")
-    falso = gemini(RespostaFalsa(403, {"error": "forbidden"}))
-    luna.processar("qual o maior planeta", Sessao("s" * 20))
-    assert len(falso.chamadas) == 1
+    falso = gemini(RespostaFalsa(403, {"error": "forbidden"}), ok("Do B."))
+    r = luna.processar("qual o maior planeta", Sessao("s" * 20))
+    assert len(falso.chamadas) == 2 and r.texto == "Do B."
 
 
 def test_log_mostra_a_mensagem_do_google(luna_ia, gemini, caplog):
@@ -554,11 +554,22 @@ def test_modelo_inexistente_fica_fora_por_mais_tempo(multi):
     assert estado["gemini:gemini-3.8-flash"] > 60 * 60
 
 
-def test_erro_de_chave_nao_pausa_e_nao_cascateia(multi):
-    rot = multi(["groq", "cerebras"], groq=[RespostaFalsa(401, {"error": {"message": "invalid key"}})])
+@pytest.mark.parametrize("status", [400, 401, 403])
+def test_qualquer_erro_passa_para_o_proximo_e_fica_no_log(multi, caplog, status):
+    rot = multi(["groq", "cerebras"], groq=[RespostaFalsa(status, {"error": {"message": "problema"}})])
     luna = Luna(carregar_config(), plataforma="web")
     r = luna.processar("pergunta um", Sessao("s" * 20))
-    assert rot.chamadas == ["groq"] and r.habilidade is None
+    assert rot.chamadas == ["groq", "cerebras"] and r.texto == "resposta do cerebras"
+    assert "ERROR" in caplog.text and "groq:openai/gpt-oss-120b falhou" in caplog.text
+
+
+def test_gemini_400_nao_impede_os_outros(multi):
+    # 400 com thinking -> tenta sem -> 400 de novo -> passa para o Groq
+    erro = RespostaFalsa(400, {"error": {"status": "INVALID_ARGUMENT", "message": "x"}})
+    rot = multi(["gemini", "groq"], gemini=[erro, erro])
+    luna = Luna(carregar_config(), plataforma="web")
+    r = luna.processar("pergunta um", Sessao("s" * 20))
+    assert r.texto == "resposta do groq" and rot.chamadas == ["gemini", "gemini", "groq"]
 
 
 def test_provedor_desconhecido_na_ordem_e_ignorado(multi, monkeypatch):

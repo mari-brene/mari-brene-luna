@@ -58,6 +58,7 @@ COMPATIVEIS = {
 PAUSA_SEM_COTA = 5 * 60          # 429: cota por minuto/dia; volta a tentar em 5 min
 PAUSA_INDISPONIVEL = 60          # 5xx: sobrecarga passageira
 PAUSA_INEXISTENTE = 6 * 60 * 60  # 404: modelo não existe para essa chave
+PAUSA_OUTROS = 10 * 60           # chave recusada, requisição recusada (400) etc.
 TURNOS_DE_MEMORIA = 6       # pares pergunta/resposta lembrados por sessão
 TAMANHO_MAXIMO = 700        # caracteres falados, no máximo
 TAMANHO_MAXIMO_COMANDO = 200
@@ -144,8 +145,10 @@ class Conversa:
             segundos = PAUSA_SEM_COTA
         elif erro.modelo_inexistente:
             segundos = PAUSA_INEXISTENTE
-        else:
+        elif erro.temporario:
             segundos = PAUSA_INDISPONIVEL
+        else:
+            segundos = PAUSA_OUTROS
         with self._trava:
             self._pausados[self.clientes.index(cliente)] = self._relogio() + segundos
         log.warning("%s fora da fila por %d s (%s)", _nome(cliente), segundos, erro)
@@ -172,10 +175,11 @@ class Conversa:
             try:
                 return cliente.gerar(instrucoes, conversa, ferramentas=[FERRAMENTA])
             except ErroIA as erro:
+                # qualquer falha de um provedor passa para o próximo da fila;
+                # erros que não são de cota/sobrecarga ficam como ERROR no log (configuração?)
                 ultimo_erro = erro
-                # cota (429) é por modelo/provedor: vale tentar o próximo também
                 if not (erro.temporario or erro.modelo_inexistente or erro.cota_esgotada):
-                    raise
+                    log.error("%s falhou: %s", _nome(cliente), erro)
                 self._pausar(cliente, erro)
         assert ultimo_erro is not None
         raise ultimo_erro
