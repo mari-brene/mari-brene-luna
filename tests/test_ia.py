@@ -205,10 +205,10 @@ def test_limite_estourado_avisa_sem_chamar_o_gemini(gemini):
     assert segundo.texto is None and segundo.fala == "ia_limite" and len(falso.chamadas) == 1
 
 
-def test_503_tenta_de_novo_e_funciona(luna_ia, gemini):
+def test_503_nao_repete_o_mesmo_modelo(luna_ia, gemini):
     falso = gemini(RespostaFalsa(503, {"error": "overloaded"}), ok("Júpiter!"))
     r = luna_ia.processar("qual o maior planeta", Sessao("s" * 20))
-    assert r.texto == "Júpiter!" and len(falso.chamadas) == 2
+    assert len(falso.chamadas) == 1 and "sobrecarregad" in r.texto.lower() or "503" in r.texto
 
 
 @pytest.mark.parametrize("status", [500, 502, 503, 504])
@@ -216,7 +216,7 @@ def test_indisponivel_sempre_vira_fala_de_sobrecarga(luna_ia, gemini, status):
     falso = gemini(*[RespostaFalsa(status, {"error": "x"})] * 2)
     sessao = Sessao("s" * 20)
     r = luna_ia.processar("qual o maior planeta", sessao)
-    assert len(falso.chamadas) == 2  # 1 + 1 tentativa extra (poupa cota)
+    assert len(falso.chamadas) == 1  # sem nova tentativa no mesmo modelo
     assert r.habilidade is None
     assert "sobrecarregad" in r.texto.lower() or "503" in r.texto
     assert sessao.memoria_ia == []
@@ -227,7 +227,7 @@ def test_passa_para_o_proximo_modelo(monkeypatch, gemini, falha_primeiro):
     monkeypatch.setenv("GEMINI_API_KEY", CHAVE)
     monkeypatch.setenv("GEMINI_MODELO", "modelo-a,modelo-b")
     luna = Luna(carregar_config(), plataforma="web")
-    respostas = [RespostaFalsa(falha_primeiro, {"error": "x"})] * (2 if falha_primeiro == 503 else 1)
+    respostas = [RespostaFalsa(falha_primeiro, {"error": "x"})]
     falso = gemini(*respostas, ok("Do modelo B."))
     r = luna.processar("qual o maior planeta", Sessao("s" * 20))
     assert r.texto == "Do modelo B."
@@ -245,7 +245,7 @@ def test_erro_de_permissao_tenta_o_proximo_modelo(monkeypatch, gemini):
 
 def test_log_mostra_a_mensagem_do_google(luna_ia, gemini, caplog):
     corpo = {"error": {"code": 503, "status": "UNAVAILABLE", "message": "The model is overloaded."}}
-    gemini(*[RespostaFalsa(503, corpo)] * 2)
+    gemini(RespostaFalsa(503, corpo))
     luna_ia.processar("qual o maior planeta", Sessao("s" * 20))
     assert "UNAVAILABLE The model is overloaded." in caplog.text
 
@@ -461,7 +461,10 @@ class RoteadorMulti:
         self.chamadas.append(provedor)
         fila = self.filas.get(provedor) or []
         if fila:
-            return fila.pop(0)
+            item = fila.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
         padrao = f"resposta do {provedor}"
         return ok(padrao) if provedor == "gemini" else grok_ok(padrao)  # cada um no seu formato
 
@@ -576,3 +579,32 @@ def test_provedor_desconhecido_na_ordem_e_ignorado(multi, monkeypatch):
     multi(["groq"])
     monkeypatch.setenv("LUNA_IA_ORDEM", "inventado,groq")
     assert [c.provedor for c in criar_conversa().clientes] == ["groq"]
+
+
+def test_timeout_conta_como_sobrecarga_e_pula_para_o_proximo(multi):
+    rot = multi(["gemini", "groq"], gemini=[requests.ReadTimeout("read timed out")])
+    luna = Luna(carregar_config(), plataforma="web")
+    r = luna.processar("pergunta um", Sessao("s" * 20))
+    assert r.texto == "resposta do groq"
+    estado = {e["modelo"]: e["pausado_por_s"] for e in luna.ia.estado()}
+    assert 0 < estado["gemini:gemini-3.8-flash"] <= 3 * 60
+
+
+def test_timeouts_curtos_em_todos_os_clientes():
+    from luna.ia import gemini as g, openai_compat as o
+    assert g.TIMEOUT[1] <= 15 and o.TIMEOUT[1] <= 15
+
+
+def test_orcamento_de_tempo_por_mensagem(multi):
+    from luna.ia import ORCAMENTO_S
+    rot = multi(["gemini", "groq", "mistral"],
+                gemini=[RespostaFalsa(503, {"error": "x"})], groq=[RespostaFalsa(503, {"error": "x"})])
+    luna = Luna(carregar_config(), plataforma="web")
+    tempo = [0.0]
+
+    def relogio():
+        tempo[0] += ORCAMENTO_S / 2 + 1   # cada consulta "gasta" mais de metade do orçamento
+        return tempo[0]
+    luna.ia._relogio = relogio
+    r = luna.processar("pergunta um", Sessao("s" * 20))
+    assert "mistral" not in rot.chamadas and r.habilidade is None

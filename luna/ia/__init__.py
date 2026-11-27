@@ -56,9 +56,10 @@ COMPATIVEIS = {
 
 # quanto tempo um modelo fica fora da fila depois de falhar (segundos)
 PAUSA_SEM_COTA = 5 * 60          # 429: cota por minuto/dia; volta a tentar em 5 min
-PAUSA_INDISPONIVEL = 60          # 5xx: sobrecarga passageira
+PAUSA_INDISPONIVEL = 3 * 60      # 5xx / timeout: sobrecarga (no plano gratuito costuma durar)
 PAUSA_INEXISTENTE = 6 * 60 * 60  # 404: modelo não existe para essa chave
 PAUSA_OUTROS = 10 * 60           # chave recusada, requisição recusada (400) etc.
+ORCAMENTO_S = 25                 # tempo máximo tentando provedores numa mesma mensagem
 TURNOS_DE_MEMORIA = 6       # pares pergunta/resposta lembrados por sessão
 TAMANHO_MAXIMO = 700        # caracteres falados, no máximo
 TAMANHO_MAXIMO_COMANDO = 200
@@ -171,7 +172,11 @@ class Conversa:
         if not candidatos:
             raise ErroIA("todos os modelos estão pausados (sem cota/indisponíveis)", cota_esgotada=True)
         ultimo_erro: ErroIA | None = None
+        inicio = self._relogio()
         for cliente in candidatos:
+            if self._relogio() - inicio > ORCAMENTO_S:
+                log.warning("orçamento de %d s esgotado; desistindo desta mensagem", ORCAMENTO_S)
+                raise ErroIA("tempo esgotado tentando os provedores", temporario=True)
             try:
                 return cliente.gerar(instrucoes, conversa, ferramentas=[FERRAMENTA])
             except ErroIA as erro:

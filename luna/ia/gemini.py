@@ -14,9 +14,9 @@ import requests
 log = logging.getLogger("luna.ia")
 
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
-TIMEOUT = 20
-TEMPORARIOS = {500, 502, 503, 504}   # sobrecarga do lado do Google: vale tentar de novo
-ESPERAS = (1.5,)                     # 1 tentativa extra só: cada chamada gasta cota do plano gratuito
+TIMEOUT = (5, 12)                    # (conectar, responder) em segundos: modelo lento perde a vez
+TEMPORARIOS = {500, 502, 503, 504}   # sobrecarga do lado do Google
+ESPERAS: tuple[float, ...] = ()      # sem nova tentativa no mesmo modelo: a fila passa para o próximo
 
 
 class ErroIA(Exception):
@@ -129,4 +129,4 @@ class ClienteGemini:
                 timeout=TIMEOUT,
             )
         except requests.RequestException as erro:
-            raise ErroIA(f"Gemini inacessível: {erro}") from erro
+            raise ErroIA(f"Gemini inacessível: {erro}", temporario=True) from erro

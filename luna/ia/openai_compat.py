@@ -14,7 +14,7 @@ from .gemini import ErroIA, RespostaModelo
 
 log = logging.getLogger("luna.ia")
 
-TIMEOUT = 20
+TIMEOUT = (5, 12)  # (conectar, responder) em segundos
 TEMPORARIOS = {500, 502, 503, 504}
 
 
@@ -43,11 +43,7 @@ class ClienteOpenAICompat:
         if ferramentas:
             corpo["tools"] = [{"type": "function", "function": f} for f in ferramentas]
 
-        resposta = self._post(corpo)
-        if resposta.status_code in TEMPORARIOS:  # 1 nova tentativa só (cada chamada custa)
-            log.warning("%s respondeu %s (%s); tentando de novo", self, resposta.status_code, self._motivo(resposta))
-            self._dormir(1.5)
-            resposta = self._post(corpo)
+        resposta = self._post(corpo)  # sem nova tentativa: em caso de falha, a fila passa para o próximo
 
         if resposta.status_code in (401, 403):
             raise ErroIA(f"{self.provedor}: chave recusada ({resposta.status_code}): {self._motivo(resposta)}")
@@ -107,4 +103,4 @@ class ClienteOpenAICompat:
                 timeout=TIMEOUT,
             )
         except requests.RequestException as erro:
-            raise ErroIA(f"{self.provedor} inacessível: {erro}") from erro
+            raise ErroIA(f"{self.provedor} inacessível: {erro}", temporario=True) from erro

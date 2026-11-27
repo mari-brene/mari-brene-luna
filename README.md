@@ -195,11 +195,11 @@ A IA recebe uma única ferramenta, `executar_comando(frase)`, e a lista de exemp
 
   O modelo de cada um muda com `<PROVEDOR>_MODELO` (por exemplo `GROQ_MODELO`), que aceita uma lista separada por vírgula. Exceto o Gemini, todos usam o mesmo cliente no formato OpenAI (`luna/ia/openai_compat.py`).
 - **Fila com troca automática:** a ordem padrão é `gemini,groq,cerebras,mistral,openrouter,grok`, gratuitos primeiro e pago por último, e pode ser mudada em `LUNA_IA_ORDEM`. Quando um provedor fica sem cota (429), sobrecarregado (5xx) ou sem o modelo (404), o próximo responde, com a mesma persona, a mesma memória e a mesma ferramenta `executar_comando`.
-- **Pausa automática:** quem falhou sai da fila por um tempo (5 min sem cota, 1 min sobrecarregado, 6 h modelo inexistente), e as próximas mensagens vão direto para quem está funcionando, sem esperar. Se todos estiverem pausados, a Luna avisa na hora, sem gastar nenhuma chamada. Qualquer outro erro (chave recusada, requisição recusada) também passa para o próximo e fica registrado como `ERROR` no log, para a configuração errada não passar despercebida.
+- **Pausa automática:** quem falhou sai da fila por um tempo (5 min sem cota, 3 min sobrecarregado ou lento, 10 min outros erros, 6 h modelo inexistente), e as próximas mensagens vão direto para quem está funcionando, sem esperar. Se todos estiverem pausados, a Luna avisa na hora, sem gastar nenhuma chamada. Qualquer outro erro (chave recusada, requisição recusada) também passa para o próximo e fica registrado como `ERROR` no log, para a configuração errada não passar despercebida.
 - **Implementação:** chamada REST ao `generateContent`, sem SDK (`luna/ia/`). Instruções de sistema com a persona, histórico curto por sessão, os "pensamentos" do modelo descartados, markdown removido e resposta cortada para caber na fala.
 - **Proteção da cota:** limite por sessão (`LUNA_IA_POR_SESSAO`, padrão 20 por hora) e global (`LUNA_IA_POR_MINUTO`, padrão 10 por minuto). Quando estoura, a Luna avisa com humor e os comandos continuam funcionando.
 - **Modelo:** `GEMINI_MODELO` (padrão `gemini-3.8-flash`). Aceita uma lista separada por vírgula, por exemplo `gemini-4-hydrogen,gemini-3.8-flash`: se um modelo estiver sobrecarregado (5xx) ou não existir (404), a Luna passa para o próximo. Se o modelo não aceitar `thinkingConfig`, o cliente repete a chamada sem ele.
-- **Falhas:** sobrecarga do Google (500 a 504) é tentada de novo 1 vez (cada chamada gasta cota). Sobrecarga, modelo inexistente (404) ou cota esgotada (429) passam para o próximo modelo da lista, já que a cota é por modelo. Rede, cota (429), bloqueio de segurança ou resposta vazia viram uma fala amigável e um log no servidor; nunca derrubam a API.
+- **Falhas e lentidão:** cada chamada tem limite de 5 s para conectar e 12 s para responder, e o mesmo modelo não é tentado de novo. Uma mensagem gasta no máximo 25 s percorrendo a fila; depois disso, a Luna avisa em vez de travar. Sobrecarga, modelo inexistente (404) ou cota esgotada (429) passam para o próximo modelo da lista, já que a cota é por modelo. Rede, cota (429), bloqueio de segurança ou resposta vazia viram uma fala amigável e um log no servidor; nunca derrubam a API.
 
 ## Configuração — `config.json`
 
@@ -296,7 +296,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-São 204 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
+São 207 testes, que rodam em menos de 1 segundo, sem internet e sem tocar no sistema:
 
 - as APIs são simuladas e cada teste usa um SQLite temporário, e um PostgREST falso em memória testa o Supabase com os filtros e headers reais;
 - a API é testada de ponta a ponta com o `TestClient`, incluindo validação, CORS e fluxo de sessão;
